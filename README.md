@@ -5,6 +5,20 @@ TabFinder reads the metadata inside the tab files themselves (title, artist, alb
 tracks, tunings, tempo changes). When a file doesn't have that metadata, it falls back
 to the folder layout and the file name.
 
+<p align="center">
+  <img src="docs/screenshots/desktop-list.png" width="720" alt="The desktop app listing songs with their tunings and tempos">
+</p>
+
+| Tuning suggestions from your library | Artist and BPM range filters (light theme) |
+|---|---|
+| <img src="docs/screenshots/desktop-tuning.png" alt="The tuning menu, grouped by string count"> | <img src="docs/screenshots/desktop-light.png" alt="Songs by one artist between 100 and 150 BPM, in the light theme"> |
+
+| Android | Android, filtered to Drop D |
+|---|---|
+| <img src="docs/screenshots/android-list.png" width="360" alt="The Android app's song list on a tablet"> | <img src="docs/screenshots/android-tuning.png" width="360" alt="The Android app filtered to Drop D"> |
+
+All artists, albums and songs in the screenshots are made up.
+
 There are four programs, all built on the same Go core:
 
 | Program | Path | What it is |
@@ -121,6 +135,11 @@ mise run test-device   # instrumented tests and perf check on a connected device
 
 Desktop UI screenshots: `TABFINDER_SHOTS=<dir> go test ./cmd/tabfinder`. This needs a GPU;
 without one, the screenshots are skipped.
+
+The README's desktop screenshots come from `mise run screenshots`, which renders the app
+offscreen with a made-up library (`cmd/tabfinder/readme_shots_test.go`). The Android
+screenshots were taken from the debug build on a tablet, using the same library: set
+`TABFINDER_README_LIBRARY=<dir>` when you run the test to write the library's files there.
 
 All test data is made up: no real bands, songs or tabs. See
 [docs/test-plan.md](docs/test-plan.md) for the fixtures, the conventions and what is covered.

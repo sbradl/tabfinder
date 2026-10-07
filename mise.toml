@@ -73,6 +73,10 @@ run = "adb shell am start -n dev.tabsync.tabfinder/.MainActivity"
 description = "Run the desktop app"
 run = "go run -ldflags=-X=gioui.org/app.ID=dev.tabsync.tabfinder ./cmd/tabfinder"
 
+[tasks.screenshots]
+description = "Render the README's desktop screenshots into docs/screenshots"
+run = 'TABFINDER_README_SHOTS="{{config_root}}/docs/screenshots" go test -count=1 -run TestReadmeScreenshots ./cmd/tabfinder'
+
 [tasks.desktop-install]
 description = "Install the desktop app to ~/.local with an application menu entry"
 run = "cmd/tabfinder/install.sh"
