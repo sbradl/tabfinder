@@ -4,11 +4,12 @@
 # next to the real app). It gives the app a small tab folder (the made-up fixture library of
 # internal/tab/testdata), checks the list is on screen, goes home, kills the process, reopens the app and
 # checks that the list is back and nothing crashed. Filters are not saved across process death (only the list).
+# The folder is in shared storage: from Android 11 on, adb can't create folders in another app's Android/data.
 set -eu
 cd "$(dirname "$0")/.."
 PKG=dev.tabsync.tabfinder.debug
 ACTIVITY=$PKG/dev.tabsync.tabfinder.MainActivity
-DIR=/sdcard/Android/data/$PKG/files/ProcessDeathTest
+DIR=/sdcard/TabFinderProcessDeathTest
 SONG="Salt Lamp" # a title in the fixture library
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
@@ -35,7 +36,12 @@ adb shell am force-stop $PKG
 adb shell rm -rf "$DIR"
 adb shell mkdir -p "$DIR"
 adb push internal/tab/testdata/library/. "$DIR" >/dev/null
-adb shell pm grant $PKG android.permission.READ_EXTERNAL_STORAGE
+# Storage access: the permission up to Android 10, the all-files app op from Android 11 on (as the device tests do).
+if [ "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" -le 29 ]; then
+  adb shell pm grant $PKG android.permission.READ_EXTERNAL_STORAGE
+else
+  adb shell appops set $PKG MANAGE_EXTERNAL_STORAGE allow
+fi
 adb shell "run-as $PKG sh -c 'mkdir -p shared_prefs && rm -f files/index.jsonl && echo \"<?xml version=\\\"1.0\\\" encoding=\\\"utf-8\\\" standalone=\\\"yes\\\"?><map><string name=\\\"root\\\">$DIR</string></map>\" > shared_prefs/settings.xml'"
 
 adb logcat -c
