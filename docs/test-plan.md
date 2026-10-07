@@ -438,7 +438,7 @@ preferences instead of the system folder picker, which tests can't drive
 reliably. Use Compose UI tests with the test tags from R3 and Espresso-Intents
 for TuxGuitar.
 
-- [x] E-AND-01 *(the no-access prompt runs on a fresh install with `withoutAccess=true`, see `mise run test-device`, tapping Allow in the system dialog on API 29; the API 30+ part can't run here: no emulator on this machine, and the tablet is API 29)* No access → "Allow file access"; on API 29 the button requests
+- [x] E-AND-01 *(the no-access prompt runs on a fresh install with `withoutAccess=true`, see `mise run test-device`, tapping Allow in the system dialog on API 29; the API 30+ part, the button opening the all-files settings, runs in the same fresh-install run on CI's API 34 emulator: switching the access off from a test would kill the test's process)* No access → "Allow file access"; on API 29 the button requests
   `READ_EXTERNAL_STORAGE`; on API 30+ it opens the all-files settings screen
   (intent verified); after granting and returning, the folder prompt shows.
 - [x] E-AND-02 *(without the snackbar text: the Compose test clock runs ahead whenever the test waits, and holding it stops the app's recomposition too; the ViewModel test covers the text)* Folder set, no index → scan runs (`tabscan -serve` child process

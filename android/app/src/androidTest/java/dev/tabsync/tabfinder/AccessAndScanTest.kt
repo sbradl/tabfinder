@@ -24,14 +24,30 @@ import org.junit.Test
 class AccessAndScanTest : DeviceTest() {
   // E-AND-01: needs an app without access, so it only runs with `withoutAccess=true` (see DeviceTest; `mise run test-device`
   // does that). On API 29 the button asks for READ_EXTERNAL_STORAGE: the system's dialog opens, and once Allow is
-  // tapped and the app is back, the folder prompt shows.
+  // tapped and the app is back, the folder prompt shows. On API 30+ it opens the all-files settings.
   @Test
   fun accessPromptWhenNothingIsGranted() {
     assumeTrue("run with withoutAccess=true on an app that has no access", withoutAccess)
     assertFalse("the app has access already", hasAccess())
     launch()
     compose.onNodeWithText("Allow file access").assertIsDisplayed()
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return // the button's settings screen is the next test
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      // The button opens this app's all-files settings. Only a fresh install gets to check that: switching the
+      // access off from a test kills the app's process, which is the test's too.
+      Intents.init()
+      try {
+        compose.onNodeWithTag("prompt-action").performClick()
+        Intents.intended(
+          org.hamcrest.Matchers.allOf(
+            hasAction(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION),
+            hasData("package:${context.packageName}"),
+          )
+        )
+      } finally {
+        Intents.release()
+      }
+      return
+    }
     compose.onNodeWithTag("prompt-action").performClick()
     until(10_000) { focusedWindow().contains("permission", ignoreCase = true) } // the system's permission dialog
     until(10_000) { tapAllow() }
@@ -53,29 +69,6 @@ class AccessAndScanTest : DeviceTest() {
   }
 
   private fun focusedWindow() = shell("dumpsys window").lines().firstOrNull { "mCurrentFocus" in it } ?: ""
-
-  // E-AND-01: the button on API 30+ opens the all-files settings of this app.
-  @Test
-  fun allowAccessOpensTheAllFilesSettingsOnAndroid11AndUp() {
-    assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-    assumeTrue(!withoutAccess)
-    shell("appops set ${context.packageName} MANAGE_EXTERNAL_STORAGE deny")
-    Intents.init()
-    try {
-      launch()
-      compose.onNodeWithText("Allow file access").assertIsDisplayed()
-      compose.onNodeWithTag("prompt-action").performClick()
-      Intents.intended(
-        org.hamcrest.Matchers.allOf(
-          hasAction(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION),
-          hasData("package:${context.packageName}"),
-        )
-      )
-    } finally {
-      Intents.release()
-      shell("appops set ${context.packageName} MANAGE_EXTERNAL_STORAGE allow")
-    }
-  }
 
   // E-AND-01: no folder yet.
   @Test
