@@ -4,7 +4,9 @@
 package difficulty
 
 import (
+	"fmt"
 	"maps"
+	"math/bits"
 	"regexp"
 	"slices"
 	"strings"
@@ -100,6 +102,13 @@ func Analyze(sc *score.Score, tracks []TrackInfo) []Part {
 			}
 		}
 		p.Tags = tags(r, bars)
+		distinct, played := material(bars, timesPlayed(sc.Bars))
+		if played >= 16 && 6*distinct <= played {
+			p.Tags = append(p.Tags, "repetitive")
+		}
+		if distinct >= manyBars {
+			p.Tags = append(p.Tags, "many parts")
+		}
 		out = append(out, p)
 	}
 	return out
@@ -566,4 +575,121 @@ func isBass(t TrackInfo) bool {
 
 func isGuitar(t TrackInfo) bool {
 	return strings.Contains(t.Instrument, "Guitar") || reGuitarName.MatchString(t.Name)
+}
+
+// manyBars is the number of different bars from which a part has much to learn: eight
+// sections of four bars.
+const manyBars = 24
+
+// material is how much there is to learn of a part: the number of different bars on the
+// track that has the most, and how many bars that track plays, repeats included. A bar
+// played again higher up the neck, or with a note or two changed, is no new bar.
+func material(bars []bar, plays []int) (distinct, played int) {
+	byTrack := map[int][]bar{}
+	for _, b := range bars {
+		byTrack[b.track] = append(byTrack[b.track], b)
+	}
+	for _, tbars := range byTrack {
+		var kinds [][]onset
+		n := 0
+		for _, b := range tbars {
+			if b.index < len(plays) {
+				n += plays[b.index]
+			} else {
+				n++
+			}
+			o := onsets(b)
+			if !slices.ContainsFunc(kinds, func(k []onset) bool { return alike(k, o) }) {
+				kinds = append(kinds, o)
+			}
+		}
+		if len(kinds) > distinct || len(kinds) == distinct && n > played {
+			distinct, played = len(kinds), n
+		}
+	}
+	return distinct, played
+}
+
+// onset is notes struck together: when, and what relative to the bar's first note
+// (for drums: which drums).
+type onset struct {
+	start int
+	notes string
+}
+
+func onsets(b bar) []onset {
+	var out []onset
+	ref := -1
+	for _, beat := range b.beats {
+		if !beat.Struck() {
+			continue
+		}
+		var ps []int
+		for _, n := range beat.Notes {
+			if n.Tie {
+				continue
+			}
+			p := n.Fret // a drum
+			if !b.info.Drums {
+				p = pitch(b.info, n)
+			}
+			ps = append(ps, p)
+		}
+		slices.Sort(ps)
+		if ref < 0 && !b.info.Drums {
+			ref = ps[0]
+		}
+		var sb strings.Builder
+		for _, p := range ps {
+			fmt.Fprintf(&sb, "%d ", p-max(ref, 0))
+		}
+		if len(out) > 0 && out[len(out)-1].start == beat.Start { // another voice
+			out[len(out)-1].notes += sb.String()
+			continue
+		}
+		out = append(out, onset{beat.Start, sb.String()})
+	}
+	return out
+}
+
+// alike reports whether two bars are the same but for a note or two: the same rhythm, with
+// at most one in five notes different.
+func alike(a, b []onset) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	diff := 0
+	for i := range a {
+		if a[i].start != b[i].start {
+			return false
+		}
+		if a[i].notes != b[i].notes {
+			diff++
+		}
+	}
+	return diff <= max(1, len(a)/5)
+}
+
+// timesPlayed is how often each bar is played, going through repeats and alternate endings.
+func timesPlayed(bars []score.Bar) []int {
+	plays := make([]int, len(bars))
+	start := 0
+	for i, b := range bars {
+		plays[i] = 1
+		if b.Alternate != 0 {
+			plays[i] = bits.OnesCount(uint(b.Alternate))
+		}
+		if b.RepeatOpen {
+			start = i
+		}
+		if b.Repeats > 0 {
+			for j := start; j <= i; j++ {
+				if bars[j].Alternate == 0 {
+					plays[j] += b.Repeats
+				}
+			}
+			start = i + 1
+		}
+	}
+	return plays
 }
