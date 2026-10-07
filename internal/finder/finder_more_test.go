@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"tab-sync/internal/tab"
+	"tabfinder/internal/tab"
 )
 
 func songs(artistsAndTitles ...string) []*tab.Song {

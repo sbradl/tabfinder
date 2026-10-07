@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode"
 
-	"tab-sync/internal/tab"
+	"tabfinder/internal/tab"
 )
 
 var (

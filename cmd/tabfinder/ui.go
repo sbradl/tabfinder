@@ -22,8 +22,8 @@ import (
 	"gioui.org/widget/material"
 	"golang.org/x/exp/shiny/materialdesign/icons"
 
-	"tab-sync/internal/finder"
-	"tab-sync/internal/tab"
+	"tabfinder/internal/finder"
+	"tabfinder/internal/tab"
 )
 
 type (

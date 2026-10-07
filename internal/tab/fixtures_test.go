@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"tab-sync/internal/tabfiles"
+	"tabfinder/internal/tabfiles"
 )
 
 // The fixtures F1-F14 of the test plan: one made-up tab of each kind, built by package

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"tab-sync/internal/tabfiles"
-	"tab-sync/internal/testlib"
+	"tabfinder/internal/tabfiles"
+	"tabfinder/internal/testlib"
 )
 
 // chooser is a fake kdialog that "picks" dir.

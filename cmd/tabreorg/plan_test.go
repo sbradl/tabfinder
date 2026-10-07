@@ -8,9 +8,9 @@ import (
 	"slices"
 	"testing"
 
-	"tab-sync/internal/tab"
-	"tab-sync/internal/tabfiles"
-	"tab-sync/internal/testlib"
+	"tabfinder/internal/tab"
+	"tabfinder/internal/tabfiles"
+	"tabfinder/internal/testlib"
 )
 
 // planOf plans the reorganization of a tree of tabs and returns it as src -> dst

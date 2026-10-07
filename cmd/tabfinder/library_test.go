@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"tab-sync/internal/tab"
+	"tabfinder/internal/tab"
 )
 
 // isolate points the package's config, cache and index paths at temp dirs, so

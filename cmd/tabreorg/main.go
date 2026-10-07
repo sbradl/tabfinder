@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"tab-sync/internal/tab"
+	"tabfinder/internal/tab"
 )
 
 func main() {

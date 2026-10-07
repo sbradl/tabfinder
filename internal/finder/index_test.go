@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"tab-sync/internal/tabfiles"
-	"tab-sync/internal/testlib"
+	"tabfinder/internal/tabfiles"
+	"tabfinder/internal/testlib"
 )
 
 func writeIndexText(t *testing.T, text string) string {

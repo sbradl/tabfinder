@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"tab-sync/internal/finder"
+	"tabfinder/internal/finder"
 )
 
 // serve answers the Android app's requests, one JSON object per line each

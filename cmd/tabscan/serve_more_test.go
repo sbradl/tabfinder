@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"tab-sync/internal/finder"
-	"tab-sync/internal/tab"
-	"tab-sync/internal/testlib"
+	"tabfinder/internal/finder"
+	"tabfinder/internal/tab"
+	"tabfinder/internal/testlib"
 )
 
 // session runs serve over the request lines and returns one decoded response per line.

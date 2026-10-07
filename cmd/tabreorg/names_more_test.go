@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"tab-sync/internal/tab"
+	"tabfinder/internal/tab"
 )
 
 func TestKey(t *testing.T) {

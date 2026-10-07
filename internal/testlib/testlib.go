@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"tab-sync/internal/tab"
+	"tabfinder/internal/tab"
 )
 
 // Tracks for common tunings, lowest string first.

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"tab-sync/internal/tab"
+	"tabfinder/internal/tab"
 )
 
 type move struct{ src, dst string } // paths relative to the root

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"tab-sync/internal/tabfiles"
+	"tabfinder/internal/tabfiles"
 )
 
 // TreeFiles is a small, messy tab library as path -> content, for tabscan and

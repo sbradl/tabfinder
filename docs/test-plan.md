@@ -1,6 +1,6 @@
 # Test plan
 
-What to test in tab-sync, for an agent to implement. Each test has an ID; tick it off
+What to test in tabfinder, for an agent to implement. Each test has an ID; tick it off
 (`- [x]`) when it exists and passes. Expected behavior is described as the code
 behaves today. If a test shows that behavior is wrong, stop and report it
 instead of changing the test to match.

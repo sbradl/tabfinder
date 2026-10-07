@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"tab-sync/internal/tab"
+	"tabfinder/internal/tab"
 )
 
 func TestRatioMatchesDifflib(t *testing.T) {

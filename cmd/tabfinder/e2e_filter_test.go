@@ -15,8 +15,8 @@ import (
 	"gioui.org/text"
 	"golang.org/x/image/math/fixed"
 
-	"tab-sync/internal/tab"
-	"tab-sync/internal/testlib"
+	"tabfinder/internal/tab"
+	"tabfinder/internal/testlib"
 )
 
 // indexOf is songs as the cached index file has them.

@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"tab-sync/internal/tab"
+	"tabfinder/internal/tab"
 )
 
 var (

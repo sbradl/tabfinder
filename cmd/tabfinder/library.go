@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 
-	"tab-sync/internal/finder"
-	"tab-sync/internal/tab"
+	"tabfinder/internal/finder"
+	"tabfinder/internal/tab"
 )
 
 var (

@@ -1,4 +1,4 @@
-module tab-sync
+module tabfinder
 
 go 1.27.0
 

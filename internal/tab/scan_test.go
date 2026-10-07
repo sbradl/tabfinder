@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"tab-sync/internal/tabfiles"
+	"tabfinder/internal/tabfiles"
 )
 
 func writeFile(t testing.TB, path string, data []byte) {

@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"tab-sync/internal/tab"
+	"tabfinder/internal/tab"
 )
 
 // The apps cache a scan as an index file in `tabscan -json` format, so they

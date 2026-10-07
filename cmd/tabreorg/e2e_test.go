@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"tab-sync/internal/testlib"
+	"tabfinder/internal/testlib"
 )
 
 func reorg(t *testing.T, args ...string) (stdout, stderr string, code int) {

@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"tab-sync/internal/tab"
+	"tabfinder/internal/tab"
 )
 
 func main() {

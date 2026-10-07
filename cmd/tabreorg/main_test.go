@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"tab-sync/internal/testlib"
+	"tabfinder/internal/testlib"
 )
 
 // tabreorgBin is the built command, for the end-to-end tests.
@@ -22,7 +22,7 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if tabreorgBin, err = testlib.BuildCmd(dir, "tab-sync/cmd/tabreorg"); err != nil {
+	if tabreorgBin, err = testlib.BuildCmd(dir, "tabfinder/cmd/tabreorg"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.RemoveAll(dir)
 		os.Exit(1)

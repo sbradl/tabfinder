@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"tab-sync/internal/tabfiles"
+	"tabfinder/internal/tabfiles"
 )
 
 func TestParseBytesDispatch(t *testing.T) {

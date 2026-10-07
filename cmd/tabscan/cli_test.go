@@ -13,9 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	"tab-sync/internal/tab"
-	"tab-sync/internal/tabfiles"
-	"tab-sync/internal/testlib"
+	"tabfinder/internal/tab"
+	"tabfinder/internal/tabfiles"
+	"tabfinder/internal/testlib"
 )
 
 func TestTSVWriter(t *testing.T) {

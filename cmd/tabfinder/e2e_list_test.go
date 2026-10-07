@@ -14,9 +14,9 @@ import (
 	"gioui.org/io/key"
 	"gioui.org/io/pointer"
 
-	"tab-sync/internal/finder"
-	"tab-sync/internal/tab"
-	"tab-sync/internal/testlib"
+	"tabfinder/internal/finder"
+	"tabfinder/internal/tab"
+	"tabfinder/internal/testlib"
 )
 
 func opener() map[string]string {

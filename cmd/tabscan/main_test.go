@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"tab-sync/internal/testlib"
+	"tabfinder/internal/testlib"
 )
 
 // tabscanBin is the built command, for the end-to-end tests.
@@ -17,7 +17,7 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if tabscanBin, err = testlib.BuildCmd(dir, "tab-sync/cmd/tabscan"); err != nil {
+	if tabscanBin, err = testlib.BuildCmd(dir, "tabfinder/cmd/tabscan"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.RemoveAll(dir)
 		os.Exit(1)

@@ -15,8 +15,8 @@ import (
 	"gioui.org/op"
 	"gioui.org/unit"
 
-	"tab-sync/internal/tab"
-	"tab-sync/internal/testlib"
+	"tabfinder/internal/tab"
+	"tabfinder/internal/testlib"
 )
 
 // render draws the current state to an image, or skips the test when there is

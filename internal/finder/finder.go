@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"tab-sync/internal/tab"
+	"tabfinder/internal/tab"
 )
 
 // Tuning as shown: "Drop C" on a 6-string, with its notes "C G C F A D".
