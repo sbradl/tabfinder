@@ -1,6 +1,7 @@
 package difficulty_test
 
 import (
+	"fmt"
 	"reflect"
 	"slices"
 	"testing"
@@ -162,6 +163,55 @@ func TestTagTuplets(t *testing.T) {
 		}
 		if got := slices.Contains(tags, "tuplets"); got != tt.tuplets {
 			t.Errorf("%s: tuplets %v, want %v", tt.name, got, tt.tuplets)
+		}
+	}
+}
+
+// meters is a score of one rhythm guitar playing eighth power chords through bars of these
+// time signatures ("7/8").
+func meters(sigs ...string) *score.Score {
+	sc := &score.Score{Tracks: make([]score.Track, 1)}
+	for _, sig := range sigs {
+		var b score.Bar
+		fmt.Sscanf(sig, "%d/%d", &b.Num, &b.Den)
+		b.BPM = 120
+		sc.Bars = append(sc.Bars, b)
+		var beats []score.Beat
+		for t := 0; t < b.Num*4*q/b.Den; t += e {
+			beats = append(beats, score.Beat{Start: t, Dur: e, Notes: powerChord})
+		}
+		sc.Tracks[0].Bars = append(sc.Tracks[0].Bars, beats)
+	}
+	return sc
+}
+
+func TestTagMeters(t *testing.T) {
+	repeat := func(n int, sigs ...string) []string {
+		var out []string
+		for range n {
+			out = append(out, sigs...)
+		}
+		return out
+	}
+	tests := []struct {
+		name          string
+		sigs          []string
+		odd, changing bool
+	}{
+		{"4/4", repeat(8, "4/4"), false, false},
+		{"7/8", repeat(8, "7/8"), true, false},
+		{"5/4", repeat(8, "5/4"), true, false},
+		{"compound 6/8, 9/8, 12/8", repeat(3, "6/8", "6/8", "9/8", "12/8"), false, true},
+		{"7/8 and 4/4 in turn", repeat(4, "7/8", "4/4"), true, true},
+		{"one 2/4 bar", append(repeat(8, "4/4"), append([]string{"2/4"}, repeat(8, "4/4")...)...), false, false},
+	}
+	for _, tt := range tests {
+		tags := tagsOf(t, meters(tt.sigs...), rhythmGuitar, difficulty.Rhythm)
+		if got := slices.Contains(tags, "odd meter"); got != tt.odd {
+			t.Errorf("%s: odd meter %v, want %v", tt.name, got, tt.odd)
+		}
+		if got := slices.Contains(tags, "meter changes"); got != tt.changing {
+			t.Errorf("%s: meter changes %v, want %v", tt.name, got, tt.changing)
 		}
 	}
 }

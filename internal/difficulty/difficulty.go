@@ -4,7 +4,9 @@
 package difficulty
 
 import (
+	"maps"
 	"regexp"
+	"slices"
 	"strings"
 
 	"tabfinder/internal/score"
@@ -86,7 +88,11 @@ func Analyze(sc *score.Score, tracks []TrackInfo) []Part {
 				p.Tracks = append(p.Tracks, i)
 			}
 			for _, b := range played[r][i] {
-				bars = append(bars, bar{i, b, sc.Tracks[i].Bars[b]})
+				var head score.Bar
+				if b < len(sc.Bars) {
+					head = sc.Bars[b]
+				}
+				bars = append(bars, bar{i, b, head, sc.Tracks[i].Bars[b]})
 			}
 		}
 		p.Tags = tags(bars)
@@ -98,12 +104,19 @@ func Analyze(sc *score.Score, tracks []TrackInfo) []Part {
 // bar is a bar a part is played in on one of its tracks.
 type bar struct {
 	track, index int
+	head         score.Bar // time signature, tempo
 	beats        []score.Beat
 }
 
 // tags is what makes a part with these bars hard.
 func tags(bars []bar) []string {
 	var out []string
+	if often(bars, func(b bar) bool { return oddMeter(b.head) }) {
+		out = append(out, "odd meter")
+	}
+	if meterChanges(bars) >= 4 {
+		out = append(out, "meter changes")
+	}
 	if often(bars, func(b bar) bool { return hasTuplet(b.beats, isTriplet) }) {
 		out = append(out, "triplets")
 	}
@@ -111,6 +124,33 @@ func tags(bars []bar) []string {
 		out = append(out, "tuplets")
 	}
 	return out
+}
+
+// oddMeter reports whether a bar is in an odd time signature: 5/4 or 7/8, but not 3/4 or
+// a compound one like 9/8.
+func oddMeter(b score.Bar) bool {
+	switch b.Num {
+	case 0, 1, 2, 3, 4, 6, 8, 12, 16:
+		return false
+	}
+	return !(b.Den >= 8 && b.Num%3 == 0)
+}
+
+// meterChanges is how often the time signature changes from one bar of the part to the next.
+func meterChanges(bars []bar) int {
+	sigs := map[int]score.Bar{}
+	for _, b := range bars {
+		sigs[b.index] = b.head
+	}
+	order := slices.Sorted(maps.Keys(sigs))
+	n := 0
+	for i := 1; i < len(order); i++ {
+		a, b := sigs[order[i-1]], sigs[order[i]]
+		if a.Num != b.Num || a.Den != b.Den {
+			n++
+		}
+	}
+	return n
 }
 
 // isTriplet reports whether n:m tuplets are triplets: 3, or 6 or 12 played as triplets of triplets.
