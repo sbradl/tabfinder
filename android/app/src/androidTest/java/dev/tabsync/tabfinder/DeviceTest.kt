@@ -38,8 +38,12 @@ abstract class DeviceTest {
    */
   protected val withoutAccess = InstrumentationRegistry.getArguments().getString("withoutAccess") == "true"
 
+  // READ_EXTERNAL_STORAGE is only requested up to Android 10 (granting it later throws); from Android 11 on,
+  // access is the MANAGE_EXTERNAL_STORAGE app op set in grantAllFilesAccess.
   @get:Rule(order = 0)
-  val permission: TestRule = if (withoutAccess) TestRule { base, _ -> base } else GrantPermissionRule.grant(Manifest.permission.READ_EXTERNAL_STORAGE)
+  val permission: TestRule =
+    if (withoutAccess || Build.VERSION.SDK_INT > Build.VERSION_CODES.Q) TestRule { base, _ -> base }
+    else GrantPermissionRule.grant(Manifest.permission.READ_EXTERNAL_STORAGE)
   @get:Rule(order = 1) val compose = createEmptyComposeRule()
 
   protected val fixtureRoot = File(context.getExternalFilesDir(null), "TabFinderTest")

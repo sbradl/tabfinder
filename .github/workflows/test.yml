@@ -116,6 +116,9 @@ jobs:
           # The default userdata partition needs more disk than the runner has free.
           disk-size: 2048M
           cores: 4
+          # The tests were written on a 1200x1920 tablet at 240 dpi; the default screen is too small to reach
+          # some of the rows and menu items they tap.
+          pre-emulator-launch-script: printf 'hw.lcd.width=1200\nhw.lcd.height=1920\nhw.lcd.density=240\n' >> ~/.android/avd/test.avd/config.ini
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: |
             android/gradlew -p android connectedDebugAndroidTest
