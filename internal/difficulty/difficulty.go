@@ -143,6 +143,9 @@ func tags(r Role, bars []bar) []string {
 		if often(bars, stretches) {
 			out = append(out, "stretches")
 		}
+		if often(bars, sweeps) {
+			out = append(out, "sweeps")
+		}
 	}
 	if r == Drums {
 		if often(bars, doubleKick) {
@@ -389,6 +392,42 @@ func stretches(b bar) bool {
 		if len(f.strings) >= 2 && f.hi-f.lo >= stretchFrets {
 			return true
 		}
+	}
+	return false
+}
+
+// sweeps reports whether a bar has a sweep: single notes over four strings or more, one
+// string after the next in one direction, each less than 0.11 s after the one before
+// (sixteenths at 136 BPM), too fast to pick string by string.
+func sweeps(b bar) bool {
+	const gap, run = 0.11, 4
+	tick := seconds(b.head) / float64(barTicks(b.head))
+	n, dir, last := 0, 0, score.Beat{}
+	for _, beat := range b.beats {
+		if !beat.Struck() {
+			continue
+		}
+		if len(beat.Notes) != 1 {
+			n = 0
+			continue
+		}
+		step := 0
+		if n > 0 {
+			step = beat.Notes[0].String - last.Notes[0].String
+		}
+		switch {
+		case n > 0 && (step == 1 || step == -1) && (n == 1 || step == dir) &&
+			float64(beat.Start-last.Start)*tick < gap:
+			n, dir = n+1, step
+		case n > 0 && (step == 1 || step == -1) && float64(beat.Start-last.Start)*tick < gap:
+			n, dir = 2, step // turned around: the last note starts the next run
+		default:
+			n, dir = 1, 0
+		}
+		if n >= run {
+			return true
+		}
+		last = beat
 	}
 	return false
 }

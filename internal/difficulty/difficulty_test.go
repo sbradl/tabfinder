@@ -466,6 +466,31 @@ func TestTagChordsAndStretches(t *testing.T) {
 	}
 }
 
+func TestTagSweeps(t *testing.T) {
+	// An A minor arpeggio over five strings, up and down, a note per string.
+	var arpeggio []score.Beat
+	strs, frets := []int{1, 2, 3, 4, 5, 4, 3, 2}, []int{12, 14, 14, 13, 12, 13, 14, 14}
+	for i := range 16 {
+		arpeggio = append(arpeggio, score.Beat{Start: i * s, Dur: s, Notes: []score.Note{{String: strs[i%8], Fret: frets[i%8]}}})
+	}
+	tests := []struct {
+		name string
+		bar  []score.Beat
+		bpm  float64
+		want bool
+	}{
+		{"arpeggio at 150", arpeggio, 150, true},
+		{"arpeggio at 90", arpeggio, 90, false},
+		{"two-string line at 150", melody(0), 150, false},
+	}
+	for _, tt := range tests {
+		sc := &score.Score{Bars: bars4(8, tt.bpm), Tracks: []score.Track{track(8, tt.bar)}}
+		if got := slices.Contains(tagsOf(t, sc, leadGuitar, difficulty.Lead), "sweeps"); got != tt.want {
+			t.Errorf("%s: sweeps %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 // melody is a bar of single sixteenth notes up and down the B and high E strings
 // around the 12th fret, with fx on every fourth note.
 func melody(fx score.Fx) []score.Beat {
