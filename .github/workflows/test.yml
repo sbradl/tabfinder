@@ -87,12 +87,15 @@ jobs:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
       - uses: gradle/actions/setup-gradle@v6
+      # Unlike android/arm64, android/amd64 needs cgo (external linking): use the NDK's clang for minSdk 29.
       - name: Build tabscan for the emulator
-        run: go build -trimpath -ldflags="-s -w" -o android/app/src/main/jniLibs/x86_64/libtabscan.so ./cmd/tabscan
+        run: |
+          export CC="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android29-clang"
+          go build -trimpath -ldflags="-s -w" -o android/app/src/main/jniLibs/x86_64/libtabscan.so ./cmd/tabscan
         env:
           GOOS: android
           GOARCH: amd64
-          CGO_ENABLED: "0"
+          CGO_ENABLED: "1"
       # Build before the emulator starts, so it runs only for the tests.
       - name: Build the app and tests
         run: android/gradlew -p android assembleDebug assembleDebugAndroidTest
