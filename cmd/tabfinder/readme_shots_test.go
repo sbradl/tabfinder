@@ -26,7 +26,6 @@ func showcaseLibrary() map[string][]byte {
 		dadgad = []int{62, 57, 55, 50, 45, 38}
 		openG  = []int{62, 59, 55, 50, 43, 38}
 		b7     = []int{64, 59, 55, 50, 45, 40, 35}
-		f8     = []int{64, 59, 55, 50, 45, 40, 35, 30}
 	)
 	gtr := func(name string, strings []int) tabfiles.GPTrack {
 		return tabfiles.GPTrack{Name: name, Strings: strings, Program: 30}
@@ -57,7 +56,7 @@ func showcaseLibrary() map[string][]byte {
 		{"Paper Satellites", "Cold Start", "Signal Fade", 170, nil, []tabfiles.GPTrack{gtr("Guitar", std)}},
 		{"Moss Cathedral", "Hollow Choir", "Lantern", 84, nil, []tabfiles.GPTrack{gtr("Slide", openG)}},
 		{"Moss Cathedral", "Hollow Choir", "Under Glass", 66, nil, []tabfiles.GPTrack{gtr("Guitar", dropB), bass}},
-		{"Seventh Floor", "Static Garden", "Paper Weather", 140, nil, []tabfiles.GPTrack{gtr("Rhythm 8", f8), gtr("Lead", std)}},
+		{"Seventh Floor", "Static Garden", "Paper Weather", 140, nil, []tabfiles.GPTrack{gtr("Rhythm 7", b7), gtr("Lead", std)}},
 		{"Seventh Floor", "Static Garden", "Cut Short", 125, nil, []tabfiles.GPTrack{gtr("Guitar 7", b7)}},
 		{"Die Äther", "Polka ist anders", "Ruf nach Sonne", 150, nil, []tabfiles.GPTrack{gtr("Gitarre", std), bass, drums}},
 		{"Orbit Club", "Night Shift", "Night Shift", 128, nil, []tabfiles.GPTrack{gtr("Guitar", std), bass}},
