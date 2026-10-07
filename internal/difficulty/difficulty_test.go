@@ -491,6 +491,86 @@ func TestTagSweeps(t *testing.T) {
 	}
 }
 
+// pattern is the n-th of many different bars: power chords on sixteenths picked by the
+// bits of n, and on 1.
+func pattern(n int) []score.Beat {
+	var starts []int
+	for i := range 16 {
+		if i == 0 || (n+1)&(1<<(i-1)) != 0 {
+			starts = append(starts, i*s)
+		}
+	}
+	return at(starts...)
+}
+
+// transposed moves a bar up the neck.
+func transposed(bar []score.Beat, frets int) []score.Beat {
+	out := slices.Clone(bar)
+	for i := range out {
+		notes := slices.Clone(out[i].Notes)
+		for j := range notes {
+			notes[j].Fret += frets
+		}
+		out[i].Notes = notes
+	}
+	return out
+}
+
+func TestTagStructure(t *testing.T) {
+	riff := pattern(5)
+	varied := slices.Clone(pattern(5))
+	varied[1].Notes = transposed(varied[1:2], 3)[0].Notes // one chord changed
+	cycle := func(n, distinct int) [][]score.Beat {
+		var out [][]score.Beat
+		for i := range n {
+			out = append(out, pattern(i%distinct))
+		}
+		return out
+	}
+	tests := []struct {
+		name                  string
+		bars                  [][]score.Beat
+		heads                 []score.Bar // nil for 4/4 without repeats
+		repetitive, manyParts bool
+	}{
+		{"one riff, 32 times", track(32, riff).Bars, nil, true, false},
+		{"one riff, 4 bars repeated 8 times", track(4, riff).Bars,
+			[]score.Bar{{Num: 4, Den: 4, RepeatOpen: true}, {Num: 4, Den: 4}, {Num: 4, Den: 4}, {Num: 4, Den: 4, Repeats: 7}}, true, false},
+		{"a riff moved up and down", func() [][]score.Beat {
+			var out [][]score.Beat
+			for i := range 32 {
+				out = append(out, transposed(riff, (i%4)*2))
+			}
+			return out
+		}(), nil, true, false},
+		{"a riff with small changes", func() [][]score.Beat {
+			var out [][]score.Beat
+			for i := range 32 {
+				out = append(out, [][]score.Beat{riff, varied}[i%2])
+			}
+			return out
+		}(), nil, true, false},
+		{"8 bars over and over", cycle(32, 8), nil, false, false},
+		{"40 different bars", cycle(40, 40), nil, false, true},
+		{"8 bars repeated, but 4 written", cycle(4, 4),
+			[]score.Bar{{Num: 4, Den: 4, RepeatOpen: true}, {Num: 4, Den: 4}, {Num: 4, Den: 4}, {Num: 4, Den: 4, Repeats: 1}}, false, false},
+	}
+	for _, tt := range tests {
+		heads := tt.heads
+		if heads == nil {
+			heads = bars4(len(tt.bars), 120)
+		}
+		sc := &score.Score{Bars: heads, Tracks: []score.Track{{Bars: tt.bars}}}
+		tags := tagsOf(t, sc, rhythmGuitar, difficulty.Rhythm)
+		if got := slices.Contains(tags, "repetitive"); got != tt.repetitive {
+			t.Errorf("%s: repetitive %v, want %v", tt.name, got, tt.repetitive)
+		}
+		if got := slices.Contains(tags, "many parts"); got != tt.manyParts {
+			t.Errorf("%s: many parts %v, want %v", tt.name, got, tt.manyParts)
+		}
+	}
+}
+
 // melody is a bar of single sixteenth notes up and down the B and high E strings
 // around the 12th fret, with fx on every fourth note.
 func melody(fx score.Fx) []score.Beat {
