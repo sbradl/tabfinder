@@ -14,15 +14,16 @@ import (
 	"tabfinder/internal/tuxguitar"
 )
 
-// Tuning is a tuning tag or suggestion: "Drop C", with the notes as its detail.
+// Tuning is a tuning tag or suggestion: "Drop C", with the notes as its detail. Picking it
+// puts its label and string count into the query.
 type Tuning struct {
-	finder.Tuning
-	Label  string `json:"label"`
-	Detail string `json:"detail"` // the notes, unless they are the label already
+	Strings int    `json:"strings"`
+	Label   string `json:"label"`
+	Detail  string `json:"detail"` // the notes, unless they are the label already
 }
 
 func TuningOf(t finder.Tuning) Tuning {
-	r := Tuning{Tuning: t, Label: t.Label()}
+	r := Tuning{Strings: t.Strings, Label: t.Label()}
 	if r.Label != t.Notes {
 		r.Detail = t.Notes
 	}
@@ -62,7 +63,7 @@ func Of(e finder.Entry) Song {
 		Subtitle:   subtitle(s),
 		Tunings:    Tunings(e.Tunings),
 		BPMs:       []string{},
-		Unreadable: s.Error != "" && len(e.Tunings) == 0,
+		Unreadable: s.Unreadable(),
 		OpenAs:     tuxguitar.FileName(s),
 	}
 	for _, bpm := range s.DistinctBPMs() {

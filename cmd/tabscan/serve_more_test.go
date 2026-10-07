@@ -81,8 +81,8 @@ func TestServeRequests(t *testing.T) {
 		if _, ok := r[0]["warning"]; ok {
 			t.Error("warning on load")
 		}
-		if _, ok := r[0]["unreadable"]; ok {
-			t.Error("unreadable on load")
+		if _, ok := r[0]["summary"]; ok {
+			t.Error("a scan summary on load")
 		}
 	})
 	t.Run("load of a malformed index", func(t *testing.T) {
@@ -106,15 +106,15 @@ func TestServeRequests(t *testing.T) {
 			t.Errorf("warning = %v", r[0]["warning"])
 		}
 	})
-	t.Run("scan counts unreadable files", func(t *testing.T) {
+	t.Run("scan sums up its unreadable files", func(t *testing.T) {
 		root := testlib.Tree(t)
 		idx := filepath.Join(t.TempDir(), "i.jsonl")
 		r := session(t, req(map[string]any{"op": "scan", "root": root, "index": idx}))
 		if got := list(t, r[0], "songs"); len(got) != 20 {
 			t.Errorf("%d songs", len(got))
 		}
-		if r[0]["unreadable"] != float64(1) {
-			t.Errorf("unreadable = %v", r[0]["unreadable"])
+		if r[0]["summary"] != "20 tabs, 1 unreadable" {
+			t.Errorf("summary = %v", r[0]["summary"])
 		}
 		if _, err := os.Stat(idx); err != nil {
 			t.Error("index not written")
@@ -267,7 +267,7 @@ func TestServeRequests(t *testing.T) {
 		}
 		tunings := list(t, r[1], "tunings")
 		for _, tu := range tunings {
-			if label := tu.(map[string]any)["label"].(string); !strings.Contains(strings.ToLower(label+" "+tu.(map[string]any)["notes"].(string)), "drop") {
+			if label := tu.(map[string]any)["label"].(string); !strings.Contains(strings.ToLower(label+" "+tu.(map[string]any)["detail"].(string)), "drop") {
 				t.Errorf("tuning %v doesn't match the typed text", tu)
 			}
 		}
@@ -342,19 +342,20 @@ func TestServeNeverSendsNull(t *testing.T) {
 
 func TestSongOut(t *testing.T) {
 	lib := finder.New([]*tab.Song{
-		{Path: "a.gp5", Format: "gp5", Title: "Broken", Error: "unknown file format"},
+		{Path: "a.gp5", Title: "Broken", Error: "unknown file format"}, // nothing read: no format
 		{Path: "b.gp5", Format: "gp5", Title: "Partial", Error: "tempo changes incomplete", Tracks: []tab.Track{testlib.EStd6}},
 		{Path: "c.gp5", Format: "gp5", Title: "NoTunings"},
 		{Path: "d.gp5", Format: "gp5", Title: "Drums", Tracks: []tab.Track{testlib.Drums}},
 		{Path: "e.gpx.crdownload", Format: "gp6", Title: "Half: Down?"},
 		{Path: "f.gp5", Format: "gp5", Title: "Custom", Tracks: []tab.Track{testlib.Custom6, testlib.DropC6}},
 		{Path: "g.gp5", Format: "gp5", Title: "Odd", Error: "x", Tracks: []tab.Track{{Name: "T", Pitches: testlib.Custom6.Pitches}}},
+		{Path: "h.gp5", Format: "gp5", Title: "Drum Solo", Error: "tempo changes incomplete", Tracks: []tab.Track{testlib.Drums}},
 	})
 	got := map[string]rows.Song{}
 	for _, s := range rows.All(lib) {
 		got[s.Title] = s
 	}
-	for title, want := range map[string]bool{"Broken": true, "Partial": false, "NoTunings": false, "Drums": false, "Half: Down?": false, "Odd": false} {
+	for title, want := range map[string]bool{"Broken": true, "Partial": false, "NoTunings": false, "Drums": false, "Half: Down?": false, "Odd": false, "Drum Solo": false} {
 		if got[title].Unreadable != want {
 			t.Errorf("%s: unreadable = %v, want %v", title, got[title].Unreadable, want)
 		}
@@ -375,7 +376,7 @@ func TestSongOut(t *testing.T) {
 	}
 	// JSON field names, which the Android app decodes.
 	b, _ := json.Marshal(got["Custom"].Tunings[1])
-	if string(b) != `{"strings":6,"name":"Drop C","notes":"C G C F A D","label":"Drop C","detail":"C G C F A D"}` {
+	if string(b) != `{"strings":6,"label":"Drop C","detail":"C G C F A D"}` {
 		t.Errorf("tuning JSON = %s", b)
 	}
 }
@@ -457,7 +458,7 @@ func TestServeProcess(t *testing.T) {
 		t.Errorf("load without an index: %v", m)
 	}
 	m, _ := ask(map[string]any{"op": "scan", "root": root, "index": index})
-	if len(list(t, m, "songs")) != 20 || m["unreadable"] != float64(1) {
+	if len(list(t, m, "songs")) != 20 || m["summary"] != "20 tabs, 1 unreadable" {
 		t.Errorf("scan = %v", m)
 	}
 	if m, _ := ask(map[string]any{"op": "load", "index": index}); len(list(t, m, "songs")) != 20 {

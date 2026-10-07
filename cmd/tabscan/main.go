@@ -50,16 +50,22 @@ func main() {
 
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
+	failed := false // a directory couldn't be read, or a song not written
 	emit := tsvWriter(out)
 	if *jsonOut {
 		enc := json.NewEncoder(out)
 		enc.SetEscapeHTML(false)
-		emit = func(s *tab.Song) { enc.Encode(s) }
+		emit = func(s *tab.Song) {
+			if err := enc.Encode(s); err != nil {
+				fmt.Fprintf(os.Stderr, "tabscan: %s: %v\n", s.Path, err)
+				failed = true
+			}
+		}
 	} else {
 		fmt.Fprintln(out, "path\tartist\talbum\ttitle\ttempo\tinstruments\ttunings")
 	}
 
-	failed, scanned, matched := false, 0, 0
+	scanned, matched := 0, 0
 	for _, arg := range args {
 		err := tab.Walk(arg, *root, func(s *tab.Song) {
 			scanned++

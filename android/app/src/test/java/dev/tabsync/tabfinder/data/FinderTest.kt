@@ -44,11 +44,11 @@ class FinderTest {
   @Test
   fun `scan lists the songs sorted, counts the unreadable ones and writes the index`() = runBlocking {
     val b = Backend(tmp)
-    b.finder.root = library().path
+    b.finder.chooseRoot(library().path)
     val r = b.finder.scan()
     assertEquals(listOf("Amber Marsh", "Broken", "Inkwell Flamingos", "INKWELL FLAMINGOS", "Soilbed Quartet"), r.songs.map { it.artist })
     assertEquals(listOf("First Frost", "Garbled", "Mirage", "Paper Ride", "Brass Kettle"), r.songs.map { it.title })
-    assertEquals(1, r.unreadable)
+    assertEquals(1, r.songs.count { it.unreadable })
     assertNull(r.warning)
     assertTrue(r.songs.single { it.title == "Garbled" }.unreadable)
     assertEquals("Brass Kettle.tg", r.songs.last().openAs)
@@ -63,10 +63,10 @@ class FinderTest {
   @Test
   fun `scan of an empty folder`() = runBlocking {
     val b = Backend(tmp)
-    b.finder.root = tmp.newFolder("empty").path
+    b.finder.chooseRoot(tmp.newFolder("empty").path)
     val r = b.finder.scan()
     assertEquals(emptyList<Song>(), r.songs)
-    assertEquals(0, r.unreadable)
+    assertEquals("0 tabs, 0 unreadable", r.summary)
     assertNull(r.warning)
   }
 
@@ -78,7 +78,7 @@ class FinderTest {
     locked.lock()
     try {
       val b = Backend(tmp)
-      b.finder.root = root.path
+      b.finder.chooseRoot(root.path)
       val r = b.finder.scan()
       assertTrue(r.warning!!, r.warning!!.contains("ZZZ locked"))
       assertTrue(r.songs.isNotEmpty())
@@ -90,7 +90,7 @@ class FinderTest {
   @Test
   fun `search round trip`() = runBlocking {
     val b = Backend(tmp)
-    b.finder.root = library().path
+    b.finder.chooseRoot(library().path)
     val songs = b.finder.scan().songs
 
     val all = b.finder.search(Query())
@@ -110,7 +110,7 @@ class FinderTest {
   @Test
   fun `search after load uses the loaded songs`() = runBlocking {
     val b = Backend(tmp)
-    b.finder.root = library().path
+    b.finder.chooseRoot(library().path)
     b.finder.scan()
     val fresh = Finder(hostTabscan(), b.dataDir, b.store)
     assertEquals(5, fresh.load().size)
@@ -120,12 +120,12 @@ class FinderTest {
   @Test
   fun `an error from tabscan becomes an exception with its message`() = runBlocking {
     val b = Backend(tmp)
-    b.finder.root = File(tmp.root, "does-not-exist").path
+    b.finder.chooseRoot(File(tmp.root, "does-not-exist").path)
     val e = runCatching { b.finder.scan() }.exceptionOrNull()
     assertTrue("$e", e is IllegalStateException)
     assertTrue(e!!.message!!, e.message!!.contains("does-not-exist"))
     // The session goes on after an error.
-    b.finder.root = library().path
+    b.finder.chooseRoot(library().path)
     assertEquals(5, b.finder.scan().songs.size)
   }
 
@@ -139,10 +139,10 @@ class FinderTest {
   @Test
   fun `setting the folder deletes the saved scan and is remembered`() = runBlocking {
     val b = Backend(tmp)
-    b.finder.root = library().path
+    b.finder.chooseRoot(library().path)
     b.finder.scan()
     assertTrue(b.index.isFile)
-    b.finder.root = "/somewhere/else"
+    b.finder.chooseRoot("/somewhere/else")
     assertFalse(b.index.exists())
     assertEquals("/somewhere/else", b.store.root)
     assertEquals("/somewhere/else", b.finder.root)
@@ -152,7 +152,7 @@ class FinderTest {
   @Test
   fun `concurrent calls are answered in order`() = runBlocking {
     val b = Backend(tmp)
-    b.finder.root = library().path
+    b.finder.chooseRoot(library().path)
     b.finder.scan()
     val results = (1..50).map { i -> async(Dispatchers.Default) { b.finder.search(if (i % 2 == 0) Query(artist = "soil") else Query()) } }
     val answers = results.map { it.await() }

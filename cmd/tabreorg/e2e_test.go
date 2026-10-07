@@ -615,3 +615,65 @@ func TestSummaryWithoutSkip(t *testing.T) {
 		t.Errorf("summary incomplete:\n%s", s[:min(len(s), 300)])
 	}
 }
+
+// failingWriter takes n writes, then fails like a full disk.
+type failingWriter struct {
+	n   int
+	got []string
+}
+
+func (w *failingWriter) Write(b []byte) (int, error) {
+	if w.n == 0 {
+		return 0, errors.New("no space left on device")
+	}
+	w.n--
+	w.got = append(w.got, string(b))
+	return len(b), nil
+}
+
+// A move log or undo script that can't be written stops the moves at once and says so: the
+// undo script never silently misses a move that was made.
+func TestMovesStopWhenTheirRecordFails(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		log, undo *failingWriter
+		wantErr   string
+	}{
+		{"undo script full", &failingWriter{n: 9}, &failingWriter{n: 0}, "undo script, after moving a/x.tg"},
+		{"move log full", &failingWriter{n: 0}, &failingWriter{n: 9}, "move log, after moving a/x.tg"},
+		{"second undo line fails", &failingWriter{n: 9}, &failingWriter{n: 1}, "undo script, after moving a/y.tg"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			testlib.WriteFiles(t, root, map[string][]byte{"a/x.tg": []byte("x"), "a/y.tg": []byte("y"), "a/z.tg": []byte("z")})
+			err := moveAll(root, []move{{"a/x.tg", "b/x.tg"}, {"a/y.tg", "b/y.tg"}, {"a/z.tg", "b/z.tg"}}, tc.log, tc.undo)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) || !strings.Contains(err.Error(), "no space left") {
+				t.Fatalf("err = %v", err)
+			}
+			snap := snapshot(t, root)
+			if _, ok := snap["a/z.tg"]; !ok {
+				t.Error("a move after the failed record was made")
+			}
+			if len(tc.undo.got) > len(tc.log.got) {
+				t.Errorf("undo has %d lines, log %d", len(tc.undo.got), len(tc.log.got))
+			}
+		})
+	}
+}
+
+// A rename that only changes case never replaces another file of that name (Linux tells
+// them apart), but goes through where the name is free.
+func TestApplyMovesCaseOnly(t *testing.T) {
+	root := t.TempDir()
+	testlib.WriteFiles(t, root, map[string][]byte{"a/Song.tg": []byte("upper"), "a/song.tg": []byte("lower"), "a/Other.tg": []byte("o")})
+	err := applyMoves(root, []move{{"a/Other.tg", "a/other.tg"}, {"a/Song.tg", "a/song.tg"}})
+	if err == nil || !strings.Contains(err.Error(), "refusing to overwrite") {
+		t.Fatalf("err = %v", err)
+	}
+	if string(mustRead(t, filepath.Join(root, "a/song.tg"))) != "lower" || string(mustRead(t, filepath.Join(root, "a/Song.tg"))) != "upper" {
+		t.Error("a file was overwritten")
+	}
+	if string(mustRead(t, filepath.Join(root, "a/other.tg"))) != "o" {
+		t.Error("the free case-only rename wasn't made")
+	}
+}

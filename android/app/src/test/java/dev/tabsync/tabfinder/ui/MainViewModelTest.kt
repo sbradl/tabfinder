@@ -25,10 +25,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-fun song(title: String, artist: String = "A") = Song("$artist/$title.gp5", title, artist, "", emptyList(), emptyList(), false, "$title.gp5")
+fun song(title: String, artist: String = "A") = Song("$artist/$title.gp5", title, artist, "", emptyList(), false, "$title.gp5")
 
 /** A TabSource whose answers and delays the test controls. */
 class FakeSource(override var root: String? = null) : TabSource {
+  override suspend fun chooseRoot(path: String) {
+    root = path
+  }
+
   var saved: List<Song> = emptyList()
   var loadFails: Throwable? = null
   var loadGate: CompletableDeferred<Unit>? = null
@@ -175,11 +179,11 @@ class MainViewModelTest {
     assertEquals(listOf("Old"), vm.state.value.songs.map { it.title })
     source.scanGate = CompletableDeferred()
     vm.setRoot("/new")
-    assertEquals("/new", source.root)
     assertEquals("/new", vm.state.value.root)
     assertTrue(vm.state.value.songs.isEmpty())
+    advanceUntilIdle() // the folder is chosen off the main thread, then the scan starts
+    assertEquals("/new", source.root)
     assertEquals(true, vm.state.value.scanning)
-    advanceUntilIdle()
     assertEquals(listOf<String?>("/new"), source.scans)
     source.scanGate!!.complete(Unit)
     advanceUntilIdle()
@@ -192,7 +196,7 @@ class MainViewModelTest {
     val source = FakeSource("/tabs").apply { saved = listOf(song("x")) }
     val vm = vm(source)
     advanceUntilIdle()
-    source.scanResult = Result.success(ScanResult(listOf(song("a"), song("b"), song("c")), unreadable = 2, summary = "3 tabs, 2 unreadable"))
+    source.scanResult = Result.success(ScanResult(listOf(song("a"), song("b"), song("c")), summary = "3 tabs, 2 unreadable"))
     vm.rescan()
     advanceUntilIdle()
     assertEquals("3 tabs, 2 unreadable", vm.state.value.message)
@@ -204,7 +208,7 @@ class MainViewModelTest {
     val source = FakeSource("/tabs").apply { saved = listOf(song("x")) }
     val vm = vm(source)
     advanceUntilIdle()
-    source.scanResult = Result.success(ScanResult(listOf(song("a")), unreadable = 1, warning = "/tabs/locked: permission denied"))
+    source.scanResult = Result.success(ScanResult(listOf(song("a")), warning = "/tabs/locked: permission denied"))
     vm.rescan()
     advanceUntilIdle()
     assertEquals("/tabs/locked: permission denied", vm.state.value.message)

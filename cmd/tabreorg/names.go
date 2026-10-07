@@ -151,7 +151,7 @@ func (r nameRules) songName(s *tab.Song) string {
 			meta = rest
 		}
 		mk, fk := key(meta), key(fromFile)
-		if mk != "" && !r.junkArtistName(meta) && (strings.Contains(fk, mk) || strings.Contains(mk, fk)) {
+		if mk != "" && !r.placeholderTitle(meta) && (strings.Contains(fk, mk) || strings.Contains(mk, fk)) {
 			name = meta
 		}
 	}
@@ -168,7 +168,7 @@ func (r nameRules) songName(s *tab.Song) string {
 func tabExt(name string) string {
 	ext := filepath.Ext(name)
 	if l := strings.ToLower(ext); l == ".zip" || l == ".crdownload" {
-		if inner := filepath.Ext(strings.TrimSuffix(name, ext)); tab.IsTabFile("x" + inner) {
+		if inner := filepath.Ext(strings.TrimSuffix(name, ext)); tab.IsTabExt(inner) {
 			return inner + ext
 		}
 	}

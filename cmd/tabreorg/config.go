@@ -99,5 +99,9 @@ func (r nameRules) junkArtistName(name string) bool {
 	return reJunkArtist.MatchString(name) || (r.junkArtist != nil && r.junkArtist.MatchString(name))
 }
 
+// placeholderTitle reports whether a title names no song: the placeholders files put in for
+// a missing artist ("Unknown", "Track 3") stand in for a missing title too.
+func (r nameRules) placeholderTitle(title string) bool { return r.junkArtistName(title) }
+
 // dropSuffixes drops the tuning and arrangement notes from the end of a file name's title.
 func (r nameRules) dropSuffixes(name string) string { return r.suffix.ReplaceAllString(name, "") }

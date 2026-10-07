@@ -365,3 +365,26 @@ func reflectEqual(a, b *Song) bool {
 		a.ArtistSource == b.ArtistSource && a.AlbumSource == b.AlbumSource && a.TitleSource == b.TitleSource &&
 		a.Error == b.Error && reflect.DeepEqual(a.Tracks, b.Tracks) && slices.Equal(a.Tempos, b.Tempos)
 }
+
+// Unreadable follows what the parsers did: nothing read means no format; a file cut off in
+// its note data still has its format, header and tracks.
+func TestUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	full := tabfiles.GP(tabfiles.GPSpec{Version: "5.10", Title: "T", Artist: "A", Tempo: 120,
+		Tracks: []tabfiles.GPTrack{{Name: "Drums", Drums: true, Strings: []int{0, 0, 0, 0, 0, 0}}}, Bars: []tabfiles.GPBar{{}, {Tempo: 90}}})
+	files := map[string][]byte{"garbage.gp5": []byte("not a tab"), "cut.gp5": full[:len(full)-20], "whole.gp5": full}
+	for name, b := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, want := range map[string]bool{"garbage.gp5": true, "cut.gp5": false, "whole.gp5": false} {
+		s := Scan(filepath.Join(dir, name), dir)
+		if s.Unreadable() != want {
+			t.Errorf("%s: unreadable %v (format %q, error %q)", name, !want, s.Format, s.Error)
+		}
+	}
+	if s := Scan(filepath.Join(dir, "cut.gp5"), dir); s.Error == "" || s.Title != "T" {
+		t.Errorf("the cut file isn't partly read: %+v", s)
+	}
+}

@@ -70,7 +70,7 @@ type ui struct {
 func newUI(redraw func(), d dirs, c clock) *ui {
 	root, rootErr := d.loadRoot()
 	u := &ui{session: newSession(root, c.now), dirs: d, clock: c, redraw: redraw, pal: dark, posts: make(chan func(), 16), rows: map[string]*gesture.Click{}}
-	if d, ok := prefersDark(); ok && !d {
+	if dark, ok := prefersDark(); ok && !dark {
 		u.pal = light
 	}
 	u.th = material.NewTheme()
@@ -78,7 +78,7 @@ func newUI(redraw func(), d dirs, c clock) *ui {
 	u.th.Palette = material.Palette{Bg: u.pal.bg, Fg: u.pal.fg, ContrastBg: u.pal.accent, ContrastFg: u.pal.onAccent}
 	u.list.Axis = layout.Vertical
 	u.artist.label, u.name.label, u.tuning.label, u.bpm.label = "Artist", "Song", "Tuning", "BPM"
-	for _, f := range []*field{&u.artist, &u.name, &u.tuning, &u.bpm} {
+	for _, f := range u.fields() {
 		f.editor.SingleLine = true
 		f.editor.Submit = true
 	}
@@ -127,11 +127,10 @@ func (u *ui) freeMemorySoon() { u.clock.afterFunc(2*time.Second, debug.FreeOSMem
 func (u *ui) fields() []*field { return []*field{&u.artist, &u.name, &u.tuning, &u.bpm} }
 
 func (u *ui) rescan() {
-	if u.scanning || u.root == "" {
+	root, ok := u.startScan()
+	if !ok {
 		return
 	}
-	u.scanning = true
-	root := u.root
 	go func() {
 		start := time.Now()
 		songs, err := finder.ScanIndex(root, u.dirs.index())
@@ -151,12 +150,12 @@ func (u *ui) chooseFolder() {
 			case err != nil:
 				u.show(err.Error())
 			case dir != "":
-				u.root = dir
+				u.folderChosen(dir)
+				clear(u.rows) // rows of the old folder's songs
 				if err := u.dirs.saveRoot(dir); err != nil {
 					u.show("Couldn't save the folder: " + err.Error())
 				}
 				u.dirs.dropIndex()
-				u.setSongs(nil)
 				u.rescan()
 			}
 		})
@@ -337,12 +336,11 @@ func (u *ui) artistMenu() *menu {
 func (u *ui) tuningMenu() *menu {
 	var items []menuItem
 	for _, t := range u.tuningSuggestions() {
-		items = append(items, menuItem{text: t.Label, detail: t.Detail, section: rows.Section(t.Strings), value: t.Tuning})
+		items = append(items, menuItem{text: t.Label, detail: t.Detail, section: rows.Section(t.Strings), tuning: t})
 	}
 	return &menu{items: items, pick: func(it menuItem) {
-		t := it.value.(finder.Tuning)
-		u.tuning.pick(t.Label())
-		u.pickTuning(t)
+		u.tuning.pick(it.tuning.Label)
+		u.pickTuning(it.tuning)
 	}}
 }
 
@@ -515,7 +513,7 @@ func (f *field) pick(text string) {
 
 type menuItem struct {
 	text, detail, section string
-	value                 any
+	tuning                rows.Tuning // the suggestion, in the tuning field's menu
 }
 
 type menu struct {

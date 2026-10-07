@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"tabfinder/internal/finder"
+	"tabfinder/internal/rows"
 	"tabfinder/internal/tab"
 	"tabfinder/internal/testlib"
 )
@@ -39,7 +40,7 @@ func TestSessionSearch(t *testing.T) {
 
 func TestSessionTuning(t *testing.T) {
 	s := newSession("/tabs", time.Now)
-	s.pickTuning(finder.Tuning{Strings: 7, Name: "B Standard", Notes: "B E A D G B E"})
+	s.pickTuning(rows.TuningOf(finder.Tuning{Strings: 7, Name: "B Standard", Notes: "B E A D G B E"}))
 	if s.in.Tuning != "B Standard" || s.in.Strings != 7 {
 		t.Errorf("after the pick: %+v", s.in)
 	}
@@ -47,9 +48,27 @@ func TestSessionTuning(t *testing.T) {
 	if s.in.Tuning != "B Standardx" || s.in.Strings != 0 {
 		t.Errorf("typing keeps the string count: %+v", s.in)
 	}
-	s.pickTuning(finder.Tuning{Strings: 6, Name: tab.Custom, Notes: "D G D G B D"})
+	s.pickTuning(rows.TuningOf(finder.Tuning{Strings: 6, Name: tab.Custom, Notes: "D G D G B D"}))
 	if s.in.Tuning != "D G D G B D" {
 		t.Errorf("a custom tuning is picked by its notes: %+v", s.in)
+	}
+}
+
+func TestSessionFolderAndScanStart(t *testing.T) {
+	s := newSession("", time.Now)
+	if _, ok := s.startScan(); ok || s.scanning {
+		t.Error("a scan without a folder")
+	}
+	s.setSongs(testlib.Songs())
+	s.folderChosen("/new/Tabs")
+	if s.root != "/new/Tabs" || len(s.lib.Entries) != 0 || len(s.songRows) != 0 {
+		t.Errorf("after choosing: root %q, %d songs", s.root, len(s.lib.Entries))
+	}
+	if root, ok := s.startScan(); !ok || root != "/new/Tabs" || !s.scanning {
+		t.Errorf("start: %q, %v, scanning %v", root, ok, s.scanning)
+	}
+	if _, ok := s.startScan(); ok {
+		t.Error("a second scan while one runs")
 	}
 }
 

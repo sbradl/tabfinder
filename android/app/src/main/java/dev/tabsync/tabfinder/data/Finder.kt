@@ -24,7 +24,7 @@ import kotlinx.serialization.json.Json
 // each song (internal/rows) live there, in Go, shared with the desktop app; these are its answers.
 
 /** A tuning as shown: "Drop C" on a 6-string; [detail] is its notes unless the label is the notes. */
-@Serializable data class Tuning(val strings: Int, val name: String, val notes: String, val label: String, val detail: String = "")
+@Serializable data class Tuning(val strings: Int, val label: String, val detail: String = "")
 
 @Serializable
 data class Song(
@@ -32,8 +32,7 @@ data class Song(
   val title: String,
   val artist: String,
   val album: String,
-  val tunings: List<Tuning> = emptyList(), // defaults let coerceInputValues read a null as empty
-  val bpms: List<String> = emptyList(), // distinct tempos in order, the opening one first
+  val tunings: List<Tuning> = emptyList(), // the default lets coerceInputValues read a null as empty
   val unreadable: Boolean,
   val openAs: String, // the file name to hand TuxGuitar a copy under
   val subtitle: String = "", // "artist · album", leaving out what's missing
@@ -57,7 +56,7 @@ data class SearchResult(
 )
 
 @Serializable
-data class ScanResult(val songs: List<Song> = emptyList(), val unreadable: Int = 0, val summary: String = "", val warning: String? = null)
+data class ScanResult(val songs: List<Song> = emptyList(), val summary: String = "", val warning: String? = null)
 
 @Serializable
 private enum class Op {
@@ -87,8 +86,11 @@ interface RootStore {
 
 /** What the screen needs of the tab folder and its search; [Finder] is the real one. */
 interface TabSource {
-  /** Absolute path of the tab folder; setting it drops the saved scan. */
-  var root: String?
+  /** Absolute path of the tab folder; null until one is chosen. */
+  val root: String?
+
+  /** Makes [path] the tab folder, dropping the saved scan of the old one. */
+  suspend fun chooseRoot(path: String)
 
   /** The songs of the last scan, sorted by artist and title; none if there was none yet. */
   suspend fun load(): List<Song>
@@ -119,11 +121,14 @@ class Finder(private val binary: File, dataDir: File, private val store: RootSto
   private lateinit var toGo: BufferedWriter
   private lateinit var fromGo: BufferedReader
 
-  override var root: String?
+  override val root: String?
     get() = store.root
-    set(value) {
-      store.root = value
+
+  override suspend fun chooseRoot(path: String) =
+    withContext(Dispatchers.IO) {
+      store.root = path
       index.delete()
+      Unit
     }
 
   override suspend fun load(): List<Song> = call(Request(Op.LOAD, index = index.path), ScanResult.serializer()).songs

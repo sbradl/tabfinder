@@ -4,8 +4,11 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,7 +51,7 @@ func main() {
 	if skipGiven {
 		skipDirs = splitList(*skip)
 	}
-	if err := run(flag.Arg(0), *apply, *rename, *summary, skipDirs, albums); err != nil {
+	if err := run(flag.Arg(0), options{apply: *apply, rename: *rename, summary: *summary, skip: skipDirs, rules: albums}); err != nil {
 		fmt.Fprintln(os.Stderr, "tabreorg:", err)
 		os.Exit(1)
 	}
@@ -64,11 +67,21 @@ func splitList(s string) []string {
 	return out
 }
 
-func run(rootArg string, apply, rename bool, summary string, skip []string, albums nameRules) error {
+// options is what a run is asked to do.
+type options struct {
+	apply   bool   // move the files, not just plan
+	rename  bool   // name tabs after their songs
+	summary string // summary file; "" for <root>-reorg-summary.md
+	skip    []string
+	rules   nameRules
+}
+
+func run(rootArg string, o options) error {
 	root, err := filepath.Abs(rootArg)
 	if err != nil {
 		return err
 	}
+	summary := o.summary
 	if summary == "" {
 		summary = root + "-reorg-summary.md"
 	}
@@ -76,11 +89,11 @@ func run(rootArg string, apply, rename bool, summary string, skip []string, albu
 	if err := tab.Walk(root, root, func(s *tab.Song) { songs = append(songs, s) }); err != nil {
 		return err
 	}
-	p, err := newPlanner(root, skip, albums)
+	p, err := newPlanner(root, o.skip, o.rules)
 	if err != nil {
 		return err
 	}
-	places, clashes := p.plan(songs, rename)
+	places, clashes := p.plan(songs, o.rename)
 	ms := moves(places)
 	for _, m := range ms {
 		fmt.Printf("%s\t->\t%s\n", m.src, m.dst)
@@ -94,16 +107,16 @@ func run(rootArg string, apply, rename bool, summary string, skip []string, albu
 			}
 		}
 	}
-	if apply {
+	if o.apply {
 		if err := applyMoves(root, ms); err != nil {
 			return err
 		}
 	}
-	if err := writeSummary(summary, root, p, places, ms, clashes, apply); err != nil {
+	if err := writeSummary(summary, outcome{root, p, places, ms, clashes, o.apply}); err != nil {
 		return err
 	}
 	verb := "planned"
-	if apply {
+	if o.apply {
 		verb = "done"
 	}
 	fmt.Fprintf(os.Stderr, "\n%d moves/renames %s, %d name clashes; summary: %s\n", len(ms), verb, len(clashes), summary)
@@ -112,7 +125,7 @@ func run(rootArg string, apply, rename bool, summary string, skip []string, albu
 
 // applyMoves performs the moves, refusing to overwrite anything, and writes
 // a TSV log plus a shell script that reverts them.
-func applyMoves(root string, ms []move) error {
+func applyMoves(root string, ms []move) (err error) {
 	if len(ms) == 0 {
 		return nil
 	}
@@ -121,21 +134,33 @@ func applyMoves(root string, ms []move) error {
 	if err != nil {
 		return err
 	}
-	defer logFile.Close()
+	defer closeChecked(logFile, &err)
 	undoName := fmt.Sprintf("%s-undo-%s.sh", root, stamp)
 	undo, err := os.OpenFile(undoName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 	if err != nil {
 		return err
 	}
-	defer undo.Close()
-	fmt.Fprintf(undo, "#!/bin/sh\n# Reverts the moves logged in %s\nset -e\ncd %s\n", logFile.Name(), shellQuote(root))
+	defer closeChecked(undo, &err)
+	if _, err := fmt.Fprintf(undo, "#!/bin/sh\n# Reverts the moves logged in %s\nset -e\ncd %s\n", logFile.Name(), shellQuote(root)); err != nil {
+		return fmt.Errorf("undo script: %w", err)
+	}
+	if err := moveAll(root, ms, logFile, undo); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "log: %s\nundo: %s\n", logFile.Name(), undoName)
+	return nil
+}
+
+// moveAll performs the moves, recording each one done in log and undo. It stops at the first
+// move it can't make or record: the log and the undo script then cover every move made.
+func moveAll(root string, ms []move, log, undo io.Writer) error {
 	for _, m := range ms {
 		src := filepath.Join(root, filepath.FromSlash(m.src))
 		dst := filepath.Join(root, filepath.FromSlash(m.dst))
-		if !strings.EqualFold(src, dst) {
-			if _, err := os.Lstat(dst); err == nil {
-				return fmt.Errorf("refusing to overwrite %s", dst)
-			}
+		if blocked, err := takenByAnother(src, dst); err != nil {
+			return err
+		} else if blocked {
+			return fmt.Errorf("refusing to overwrite %s", dst)
 		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return err
@@ -143,12 +168,39 @@ func applyMoves(root string, ms []move) error {
 		if err := os.Rename(src, dst); err != nil {
 			return err
 		}
-		fmt.Fprintf(logFile, "%s\t%s\n", m.src, m.dst)
+		if _, err := fmt.Fprintf(log, "%s\t%s\n", m.src, m.dst); err != nil {
+			return fmt.Errorf("move log, after moving %s: %w", m.src, err)
+		}
 		dir := filepath.Dir(filepath.FromSlash(m.src))
-		fmt.Fprintf(undo, "mkdir -p %s && mv -n %s %s\n", shellQuote(dir), shellQuote(m.dst), shellQuote(m.src))
+		if _, err := fmt.Fprintf(undo, "mkdir -p %s && mv -n %s %s\n", shellQuote(dir), shellQuote(m.dst), shellQuote(m.src)); err != nil {
+			return fmt.Errorf("undo script, after moving %s (move it back by hand): %w", m.src, err)
+		}
 	}
-	fmt.Fprintf(os.Stderr, "log: %s\nundo: %s\n", logFile.Name(), undoName)
 	return nil
+}
+
+// takenByAnother reports whether dst is a file other than src. A rename that only changes
+// case may find src itself at dst, on a file system that ignores case.
+func takenByAnother(src, dst string) (bool, error) {
+	dstInfo, err := os.Lstat(dst)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	srcInfo, err := os.Lstat(src)
+	if err != nil {
+		return false, err
+	}
+	return !os.SameFile(srcInfo, dstInfo), nil
+}
+
+// closeChecked closes f, and reports a failure in *err unless there is an error already:
+// closing is when a write may turn out to have failed.
+func closeChecked(f *os.File, err *error) {
+	if cerr := f.Close(); cerr != nil && *err == nil {
+		*err = cerr
+	}
 }
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }

@@ -230,8 +230,9 @@ Make these first, each in its own commit, with existing behavior unchanged.
 - [x] U-SRV-02 Every list in every response is `[]`, never `null` (`songs`,
   `matches`, `artists`, `tunings`, a song's `tunings`/`bpms`). Check with a JSON
   scan for `null`.
-- [x] U-SRV-03 `rows.Song`: `unreadable` only when the file had an error **and**
-  no tunings; `openAs` = `tuxguitar.FileName`; `rows.Tuning.detail` empty when
+- [x] U-SRV-03 `rows.Song`: `unreadable` only when nothing could be read
+  (`tab.Song.Unreadable`: an error and no format), not for a partly read file, tunings or
+  not; `openAs` = `tuxguitar.FileName`; `rows.Tuning.detail` empty when
   label == notes (custom), else the notes.
 - [x] U-SRV-04 Fuzz `serve` with random lines: no panic, one output line per
   input line.
@@ -289,9 +290,9 @@ Make these first, each in its own commit, with existing behavior unchanged.
 ### Android JVM tests (`android/app/src/test`)
 
 - [x] U-AND-01 `Finder` against the real host tabscan (after R1): `load` with no
-  index → empty; `scan` of a temp fixture tree → songs sorted, `unreadable`
-  count, `warning` for an unreadable dir; `search` round-trip; Go returning
-  `{"error":…}` → exception with that message; setting `root` deletes the index.
+  index → empty; `scan` of a temp fixture tree → songs sorted, the
+  `summary`, `warning` for an unreadable dir; `search` round-trip; Go returning
+  `{"error":…}` → exception with that message; `chooseRoot` deletes the index.
 - [x] U-AND-02 `Finder` restart: kill the tabscan process between calls →
   next `search` restarts it, replays `load`, returns correct results; process
   that exits immediately (fake binary) → error naming the last log line.

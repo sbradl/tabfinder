@@ -76,9 +76,11 @@ class MainViewModel(private val finder: TabSource) : ViewModel() {
   }
 
   fun setRoot(root: String) {
-    finder.root = root
     _state.update { it.copy(root = root, songs = emptyList()) }
-    rescan()
+    viewModelScope.launch {
+      finder.chooseRoot(root)
+      rescan()
+    }
   }
 
   fun rescan() {

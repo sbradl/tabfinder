@@ -3,10 +3,38 @@ package tab
 import (
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
 )
+
+// Walk scans arg (a directory, walked recursively, or a single file) and
+// calls fn for every tab file, in walk order. Paths in the results are relative
+// to root; an empty root means arg itself (or a file argument's directory).
+// Like ScanAll, it stops at the first unreadable directory and returns its
+// error after the songs found before it.
+func Walk(arg, root string, fn func(*Song)) error {
+	st, err := os.Stat(arg)
+	if err != nil {
+		return err
+	}
+	if root == "" {
+		root = arg
+		if !st.IsDir() {
+			root = filepath.Dir(arg)
+		}
+	}
+	if !st.IsDir() {
+		fn(Scan(arg, root))
+		return nil
+	}
+	songs, err := scanTree(arg, root)
+	for _, s := range songs {
+		fn(s)
+	}
+	return err
+}
 
 // ScanAll scans every tab file under root and returns the songs in walk
 // order, with paths relative to root. It stops at the first unreadable

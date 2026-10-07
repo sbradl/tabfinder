@@ -58,6 +58,23 @@ func (s *session) indexLoaded(songs []*tab.Song, err error) (scan bool) {
 	return len(songs) == 0 && s.root != ""
 }
 
+// startScan marks a scan of the folder as running and returns the folder; ok is false if
+// there's no folder or a scan is running already.
+func (s *session) startScan() (root string, ok bool) {
+	if s.scanning || s.root == "" {
+		return "", false
+	}
+	s.scanning = true
+	return s.root, true
+}
+
+// folderChosen makes dir the folder: the songs of the old one are gone, and a scan of the
+// new one is due.
+func (s *session) folderChosen(dir string) {
+	s.root = dir
+	s.setSongs(nil)
+}
+
 // scanDone records the outcome of a scan that took took.
 func (s *session) scanDone(songs []*tab.Song, err error, took time.Duration) {
 	s.scanning = false
@@ -86,6 +103,6 @@ func (s *session) tuningSuggestions() []rows.Tuning {
 // typeTuning sets the typed tuning; typing drops the string count a picked suggestion set.
 func (s *session) typeTuning(text string) { s.in.Tuning, s.in.Strings = text, 0 }
 
-func (s *session) pickTuning(t finder.Tuning) { s.in.Tuning, s.in.Strings = t.Label(), t.Strings }
+func (s *session) pickTuning(t rows.Tuning) { s.in.Tuning, s.in.Strings = t.Label, t.Strings }
 
 func (s *session) clearQuery() { s.in = finder.Query{} }

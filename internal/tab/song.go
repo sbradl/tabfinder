@@ -6,7 +6,6 @@ package tab
 
 import (
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -63,7 +62,7 @@ type Tempo struct {
 
 type Song struct {
 	Path         string  `json:"path"`   // relative to the scan root
-	Format       Format  `json:"format"` // empty if unreadable
+	Format       Format  `json:"format"` // empty if nothing could be read (see Unreadable)
 	Artist       string  `json:"artist"`
 	Album        string  `json:"album"`
 	Title        string  `json:"title"`
@@ -72,8 +71,13 @@ type Song struct {
 	TitleSource  Source  `json:"titleSource"`
 	Tracks       []Track `json:"tracks,omitempty"`
 	Tempos       []Tempo `json:"tempos,omitempty"` // initial tempo first, then changes
-	Error        string  `json:"error,omitempty"`
+	Error        string  `json:"error,omitempty"`  // why the file couldn't be read, or only partly
 }
+
+// Unreadable reports whether nothing could be read from the file: a parse error before even
+// its format was known. A file read partly (an error later on) is not unreadable, whatever
+// it has to show.
+func (s *Song) Unreadable() bool { return s.Error != "" && s.Format == "" }
 
 // addTempo records a tempo, ignoring repeats of the current one.
 func (s *Song) addTempo(bar int, bpm float64) {
@@ -105,11 +109,16 @@ func (s *Song) TempoSummary() string {
 
 // FilenameTitle is the song title derived from the file name alone.
 func (s *Song) FilenameTitle() string {
-	dirArtist := ""
-	if i := strings.IndexByte(s.Path, '/'); i > 0 {
-		dirArtist = s.Path[:i]
+	return titleFromFilename(filepath.Base(s.Path), s.Artist, artistDir(s.Path))
+}
+
+// artistDir is the first folder of a path relative to the root, which the
+// <Artist>/<Album>/file layout names after the artist; "" for a file at the root.
+func artistDir(rel string) string {
+	if i := strings.IndexByte(rel, '/'); i > 0 {
+		return rel[:i]
 	}
-	return titleFromFilename(filepath.Base(s.Path), s.Artist, dirArtist)
+	return ""
 }
 
 var tabExts = map[string]bool{
@@ -118,34 +127,10 @@ var tabExts = map[string]bool{
 }
 
 // IsTabFile reports whether the file name has an extension tab files use.
-func IsTabFile(name string) bool { return tabExts[strings.ToLower(filepath.Ext(name))] }
+func IsTabFile(name string) bool { return IsTabExt(filepath.Ext(name)) }
 
-// Walk scans arg (a directory, walked recursively, or a single file) and
-// calls fn for every tab file, in walk order. Paths in the results are relative
-// to root; an empty root means arg itself (or a file argument's directory).
-// Like ScanAll, it stops at the first unreadable directory and returns its
-// error after the songs found before it.
-func Walk(arg, root string, fn func(*Song)) error {
-	st, err := os.Stat(arg)
-	if err != nil {
-		return err
-	}
-	if root == "" {
-		root = arg
-		if !st.IsDir() {
-			root = filepath.Dir(arg)
-		}
-	}
-	if !st.IsDir() {
-		fn(Scan(arg, root))
-		return nil
-	}
-	songs, err := scanTree(arg, root)
-	for _, s := range songs {
-		fn(s)
-	}
-	return err
-}
+// IsTabExt reports whether ext (".gp5") is an extension tab files use, ignoring case.
+func IsTabExt(ext string) bool { return tabExts[strings.ToLower(ext)] }
 
 // Scan parses one file. It always returns a Song; parse problems are
 // reported in Song.Error and the path-based fallbacks are applied.
@@ -188,10 +173,6 @@ func applyFallbacks(s *Song, rel string) {
 	}
 	if s.Title == "" {
 		s.TitleSource = FromPath
-		dirArtist := ""
-		if len(dirs) >= 1 {
-			dirArtist = dirs[0]
-		}
-		s.Title = titleFromFilename(filepath.Base(rel), s.Artist, dirArtist)
+		s.Title = titleFromFilename(filepath.Base(rel), s.Artist, artistDir(rel))
 	}
 }

@@ -270,3 +270,22 @@ func TestCorruptConfigIsReported(t *testing.T) {
 		t.Errorf("root %q, message %q", h.u.root, h.u.message)
 	}
 }
+
+// Choosing another folder drops the old songs' row state with them.
+func TestChooseAnotherFolder(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "Other")
+	testlib.WriteFiles(t, root, map[string][]byte{"Zed Quill/Only One.tg": tabfiles.TG1("Only One", "Zed Quill", "")})
+	h := newHarnessWith(t, harnessOpts{tools: chooser(root), waitLoad: true})
+	h.frame()
+	if len(h.u.rows) == 0 {
+		t.Fatal("no rows drawn for the old folder")
+	}
+	h.clickRect(h.buttonRect(h.topBarArea(), &h.u.folderBtn))
+	h.waitFor("the new folder's scan", func() bool { return h.u.root == root && !h.u.scanning && len(h.u.lib.Entries) == 1 })
+	h.frame()
+	for path := range h.u.rows {
+		if path != "Zed Quill/Only One.tg" {
+			t.Errorf("row state kept for %s of the old folder", path)
+		}
+	}
+}

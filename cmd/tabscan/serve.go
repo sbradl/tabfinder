@@ -14,12 +14,13 @@ import (
 // way, so its search runs on the same code as the desktop app:
 //
 //	{"op":"load","index":"/path/index.jsonl"}               -> {"songs":[...]}
-//	{"op":"scan","root":"/tabs","index":"/path/index.jsonl"} -> {"songs":[...],"unreadable":3,"summary":"948 tabs, 3 unreadable","warning":"..."}
+//	{"op":"scan","root":"/tabs","index":"/path/index.jsonl"} -> {"songs":[...],"summary":"948 tabs, 3 unreadable","warning":"..."}
 //	{"op":"search","query":{"artist":"am","tuning":"drop","strings":0,"name":"","bpm":""}}
 //	    -> {"matches":["Amber Marsh/Dusk.gp5"],"bpmInvalid":false,"artists":["Amber Marsh"],"tunings":[...]}
 //
-// Songs are rows (internal/rows), what the app shows. Matches are the paths of the matching songs of the last load or scan, in list order, so
-// the app needn't hold the same list as this process. Failures answer {"error":"..."}.
+// Songs are rows (internal/rows), what the app shows. Matches are the paths of the matching
+// songs of the last load or scan, in list order, so the app needn't hold the same list as
+// this process. Failures answer {"error":"..."}.
 func serve(in io.Reader, out io.Writer) error {
 	sc := bufio.NewScanner(in)
 	sc.Buffer(nil, 1<<20)
@@ -28,10 +29,10 @@ func serve(in io.Reader, out io.Writer) error {
 	lib := finder.New(nil)
 	for sc.Scan() {
 		var req struct {
-			Op    string       `json:"op"`
-			Index string       `json:"index"`
-			Root  string       `json:"root"`
-			Query finder.Query `json:"query"`
+			Op    string `json:"op"`
+			Index string `json:"index"`
+			Root  string `json:"root"`
+			Query query  `json:"query"`
 		}
 		var resp any
 		if err := json.Unmarshal(sc.Bytes(), &req); err != nil {
@@ -53,18 +54,19 @@ func serve(in io.Reader, out io.Writer) error {
 					break
 				}
 				lib = finder.New(songs)
-				r := songsResponse{Songs: rows.All(lib), Unreadable: rows.Unreadable(songs), Summary: rows.ScanSummary(songs)}
+				r := songsResponse{Songs: rows.All(lib), Summary: rows.ScanSummary(songs)}
 				if err != nil {
 					r.Warning = err.Error()
 				}
 				resp = r
 			case "search":
-				res := lib.Search(req.Query)
+				q := finder.Query(req.Query)
+				res := lib.Search(q)
 				resp = searchResponse{
 					Matches:    matchedPaths(lib, res.Matches),
 					BPMInvalid: res.BPMInvalid,
-					Artists:    lib.SuggestArtists(req.Query.Artist),
-					Tunings:    rows.Tunings(finder.SuggestTunings(res.Tunings, req.Query.Tuning)),
+					Artists:    lib.SuggestArtists(q.Artist),
+					Tunings:    rows.Tunings(finder.SuggestTunings(res.Tunings, q.Tuning)),
 				}
 			default:
 				resp = errorResponse{fmt.Sprintf("unknown op %q", req.Op)}
@@ -77,15 +79,23 @@ func serve(in io.Reader, out io.Writer) error {
 	return sc.Err()
 }
 
+// query is the filter fields as the app sends them (finder.Query).
+type query struct {
+	Name    string `json:"name"`
+	Artist  string `json:"artist"`
+	Tuning  string `json:"tuning"`
+	BPM     string `json:"bpm"`
+	Strings int    `json:"strings"`
+}
+
 type errorResponse struct {
 	Error string `json:"error"`
 }
 
 type songsResponse struct {
-	Songs      []rows.Song `json:"songs"`
-	Unreadable int         `json:"unreadable,omitempty"`
-	Summary    string      `json:"summary,omitempty"` // of a scan, for the message after it
-	Warning    string      `json:"warning,omitempty"` // an unreadable directory cut the scan short
+	Songs   []rows.Song `json:"songs"`
+	Summary string      `json:"summary,omitempty"` // of a scan, for the message after it
+	Warning string      `json:"warning,omitempty"` // an unreadable directory cut the scan short
 }
 
 type searchResponse struct {

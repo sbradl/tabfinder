@@ -14,9 +14,8 @@ import (
 
 // Tuning is a tuning as searched and suggested: "Drop C" on a 6-string, with its notes "C G C F A D".
 type Tuning struct {
-	Strings int    `json:"strings"`
-	Name    string `json:"name"`
-	Notes   string `json:"notes"`
+	Strings     int
+	Name, Notes string
 }
 
 // Label is what the tuning is called, in suggestions and in a query: the name, or the notes
@@ -73,12 +72,9 @@ func New(songs []*tab.Song) *Library {
 
 // Query is the filter fields as typed.
 type Query struct {
-	Name   string `json:"name"`
-	Artist string `json:"artist"`
-	Tuning string `json:"tuning"`
-	BPM    string `json:"bpm"`
+	Name, Artist, Tuning, BPM string
 	// Strings is set by picking a tuning suggestion and dropped when the tuning is typed.
-	Strings int `json:"strings"`
+	Strings int
 }
 
 func (q Query) Active() bool {
@@ -105,9 +101,9 @@ func (q Query) Filter() (f Filter, bpmInvalid bool) {
 
 // Result of a search.
 type Result struct {
-	Matches    []int    `json:"matches"` // indices into Entries
-	BPMInvalid bool     `json:"bpmInvalid"`
-	Tunings    []Tuning `json:"tunings"` // for suggestions, see Search
+	Matches    []int // indices into Entries
+	BPMInvalid bool
+	Tunings    []Tuning // for suggestions, see Search
 }
 
 // Search returns the matching songs, and the tunings of the songs the other

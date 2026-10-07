@@ -17,7 +17,7 @@ class FinderProcessTest {
 
   private fun scanned(): Pair<Backend, List<Song>> = runBlocking {
     val b = Backend(tmp)
-    b.finder.root = tmp.tree("Soilbed Quartet/Brass Kettle.tg" to tg1("Brass Kettle", "Soilbed Quartet", ""), "Amber Marsh/First.tg" to tg1("First", "Amber Marsh", "")).path
+    b.finder.chooseRoot(tmp.tree("Soilbed Quartet/Brass Kettle.tg" to tg1("Brass Kettle", "Soilbed Quartet", ""), "Amber Marsh/First.tg" to tg1("First", "Amber Marsh", "")).path)
     b to b.finder.scan().songs
   }
 
@@ -91,7 +91,7 @@ class FinderProcessTest {
     val starts = tmp.newFile("starts")
     val fake = tmp.fakeBinary("echo start >> '${starts.path}'; read line; exit 1")
     val b = Backend(tmp, fake)
-    b.finder.root = "/x"
+    runBlocking { b.finder.chooseRoot("/x") }
     assertTrue(runCatching { runBlocking { b.finder.scan() } }.isFailure)
     assertEquals("one start for the scan", 1, starts.readLines().size)
     assertTrue(runCatching { runBlocking { b.finder.search(Query()) } }.isFailure)
@@ -120,7 +120,7 @@ class FinderProcessTest {
         """while read line; do echo '{"matches":["a.gp5"],"artists":["A"],"tunings":[{"strings":6,"name":"Drop C","notes":"C G C F A D","label":"Drop C","detail":null,"extra":1}]}'; done"""
       )
     val r = Backend(tmp, fake).finder.search(Query())
-    assertEquals(listOf(Tuning(6, "Drop C", "C G C F A D", "Drop C", "")), r.tunings)
+    assertEquals(listOf(Tuning(6, "Drop C", "")), r.tunings)
   }
 
   @Test
@@ -132,7 +132,6 @@ class FinderProcessTest {
     val songs = Backend(tmp, fake).finder.load()
     assertEquals(1, songs.size)
     assertEquals(emptyList<Tuning>(), songs[0].tunings)
-    assertEquals(emptyList<String>(), songs[0].bpms)
   }
 
   @Test
@@ -142,11 +141,11 @@ class FinderProcessTest {
   }
 
   @Test
-  fun `scan answers carry the warning and the unreadable count`() = runBlocking {
-    val fake = tmp.fakeBinary("""while read line; do echo '{"songs":[],"unreadable":3,"warning":"/x: permission denied"}'; done""")
+  fun `scan answers carry the warning and the summary`() = runBlocking {
+    val fake = tmp.fakeBinary("""while read line; do echo '{"songs":[],"summary":"0 tabs, 0 unreadable","warning":"/x: permission denied"}'; done""")
     val b = Backend(tmp, fake)
-    b.finder.root = "/x"
-    assertEquals(ScanResult(emptyList(), 3, warning = "/x: permission denied"), b.finder.scan())
+    b.finder.chooseRoot("/x")
+    assertEquals(ScanResult(emptyList(), "0 tabs, 0 unreadable", "/x: permission denied"), b.finder.scan())
   }
 
   @Test

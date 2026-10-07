@@ -40,10 +40,15 @@ func TestSong(t *testing.T) {
 			t.Errorf("%s is shown as unreadable", title)
 		}
 	}
-	// An error with something read before it is not "couldn't read".
-	partial := finder.New([]*tab.Song{{Path: "a.gp5", Error: "tempo changes incomplete", Tracks: []tab.Track{testlib.EStd6}}})
-	if All(partial)[0].Unreadable {
-		t.Error("a partly read file is shown as unreadable")
+	// An error with something read before it is not "couldn't read", tunings or not.
+	partial := finder.New([]*tab.Song{
+		{Path: "a.gp5", Format: "gp5", Title: "A", Error: "tempo changes incomplete", Tracks: []tab.Track{testlib.EStd6}},
+		{Path: "b.gp5", Format: "gp5", Title: "B", Error: "tempo changes incomplete", Tracks: []tab.Track{testlib.Drums}},
+	})
+	for _, r := range All(partial) {
+		if r.Unreadable {
+			t.Errorf("%s, read partly, is shown as unreadable", r.Title)
+		}
 	}
 	// Tuning tags: one per distinct tuning, bigger string counts first.
 	var tags []string
