@@ -5,7 +5,6 @@ package difficulty
 
 import (
 	"regexp"
-	"slices"
 	"strings"
 
 	"tabfinder/internal/score"
@@ -105,11 +104,20 @@ type bar struct {
 // tags is what makes a part with these bars hard.
 func tags(bars []bar) []string {
 	var out []string
-	if often(bars, func(b bar) bool { return hasTuplet(b.beats, 3, 6) }) {
+	if often(bars, func(b bar) bool { return hasTuplet(b.beats, isTriplet) }) {
 		out = append(out, "triplets")
+	}
+	if often(bars, func(b bar) bool { return hasTuplet(b.beats, isOddTuplet) }) {
+		out = append(out, "tuplets")
 	}
 	return out
 }
+
+// isTriplet reports whether n:m tuplets are triplets: 3, or 6 or 12 played as triplets of triplets.
+func isTriplet(n int) bool { return n == 3 || n == 6 || n == 12 || n == 24 }
+
+// isOddTuplet reports whether n:m tuplets are any other: 5, 7, 9...
+func isOddTuplet(n int) bool { return n > 1 && !isTriplet(n) }
 
 // often reports whether bars with something come up in a part more than once or twice:
 // in at least two bars and every eighth.
@@ -123,10 +131,10 @@ func often(bars []bar, has func(bar) bool) bool {
 	return n >= 2 && 8*n >= len(bars)
 }
 
-// hasTuplet reports whether a beat struck is an n:m tuplet with one of these n.
-func hasTuplet(beats []score.Beat, ns ...int) bool {
+// hasTuplet reports whether a beat struck is an n:m tuplet of a kind.
+func hasTuplet(beats []score.Beat, kind func(n int) bool) bool {
 	for _, b := range beats {
-		if b.Struck() && slices.Contains(ns, b.Tuplet) {
+		if b.Struck() && kind(b.Tuplet) {
 			return true
 		}
 	}
