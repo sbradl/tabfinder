@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-07
+
 ### Fixed
 
 - Android: the first scan of a folder no longer shows "Search failed: Child of the scoped
@@ -48,5 +50,6 @@ First release.
 - Errors from the folder dialog, a corrupt `config.json` and index writes are now
   reported instead of being ignored.
 
-[Unreleased]: https://github.com/sbradl/tabfinder/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/sbradl/tabfinder/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/sbradl/tabfinder/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sbradl/tabfinder/releases/tag/v1.0.0
