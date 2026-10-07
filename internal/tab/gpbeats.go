@@ -1,17 +1,24 @@
 package tab
 
-import "fmt"
+import (
+	"cmp"
+	"fmt"
+	"math/bits"
+	"slices"
 
-// readGPMeasures walks the note data of a Guitar Pro 3-5 file. Tempo changes
-// live in beat mix-table changes, so every beat and note has to be skipped
-// structurally to reach them.
-func readGPMeasures(r *reader, major, minor, measures int, stringCounts []int, s *Song) error {
+	"tabfinder/internal/score"
+)
+
+// readGPMeasures reads the note data of a Guitar Pro 3-5 file into s.notes, and the tempo
+// changes, which live in beat mix-table changes, into s.Tempos.
+func readGPMeasures(r *reader, major, minor int, stringCounts []int, s *Song) error {
 	voices := 1
 	if major == 5 {
 		voices = 2
 	}
-	for m := 0; m < measures; m++ {
+	for m := range s.notes.Bars {
 		for t, strings := range stringCounts {
+			var bar []score.Beat
 			for v := 0; v < voices; v++ {
 				beats := r.i32()
 				if r.err != nil {
@@ -20,8 +27,10 @@ func readGPMeasures(r *reader, major, minor, measures int, stringCounts []int, s
 				if beats < 0 || beats > maxBeats {
 					return fmt.Errorf("bar %d, track %d: implausible beat count %d", m+1, t+1, beats)
 				}
+				bar = slices.Grow(bar, beats)
+				start := 0
 				for i := 0; i < beats; i++ {
-					tempo := readGPBeat(r, major, minor, strings)
+					b, tempo := readGPBeat(r, major, minor, strings)
 					if r.err != nil {
 						return r.err
 					}
@@ -31,8 +40,15 @@ func readGPMeasures(r *reader, major, minor, measures int, stringCounts []int, s
 					if tempo > 0 {
 						s.addTempo(m+1, float64(tempo))
 					}
+					b.Start, b.Voice = start, v
+					start += b.Dur
+					if len(b.Notes) > 0 {
+						bar = append(bar, b)
+					}
 				}
 			}
+			slices.SortStableFunc(bar, func(a, b score.Beat) int { return cmp.Compare(a.Start, b.Start) })
+			s.notes.Tracks[t].Bars = append(s.notes.Tracks[t].Bars, bar)
 			if major == 5 && r.pos < len(r.b) { // the file's last line-break byte is often omitted
 				r.skip(1) // line break
 			}
@@ -41,16 +57,23 @@ func readGPMeasures(r *reader, major, minor, measures int, stringCounts []int, s
 	return r.err
 }
 
-// readGPBeat skips one beat and returns its tempo change, or -1.
-func readGPBeat(r *reader, major, minor, strings int) int {
+// readGPBeat reads one beat, and returns it and its tempo change, or -1.
+func readGPBeat(r *reader, major, minor, strings int) (score.Beat, int) {
+	var b score.Beat
 	tempo := -1
 	f := r.u8()
 	if f&0x40 != 0 {
 		r.skip(1) // beat status (empty/rest)
 	}
-	r.skip(1) // duration
+	b.Dur = score.DurOf(int(int8(r.u8())))
+	if f&0x01 != 0 {
+		b.Dur += b.Dur / 2 // dotted
+	}
 	if f&0x20 != 0 {
-		r.skip(4) // tuplet
+		if n := r.i32(); n > 1 && n < 64 {
+			b.Tuplet = n
+			b.Dur = b.Dur * score.TupletBase(n) / n
+		}
 	}
 	if f&0x02 != 0 {
 		skipGPChord(r, major)
@@ -59,24 +82,30 @@ func readGPBeat(r *reader, major, minor, strings int) int {
 		r.intByteSizeString() // text
 	}
 	if f&0x08 != 0 {
-		skipGPBeatEffects(r, major)
+		b.Fx = readGPBeatEffects(r, major)
 	}
 	if f&0x10 != 0 {
 		tempo = readGPMixTable(r, major, minor)
 	}
 	played := r.u8()
+	if c := bits.OnesCount8(uint8(played)); c > 0 {
+		b.Notes = make([]score.Note, 0, c)
+	}
 	for n := 1; n <= strings; n++ { // bit 6 = string 1
 		if played&(1<<(7-n)) != 0 {
-			skipGPNote(r, major)
+			note := readGPNote(r, major)
+			note.String = strings - n
+			b.Notes = append(b.Notes, note)
 		}
 	}
+	slices.Reverse(b.Notes) // lowest string first
 	if major == 5 {
 		r.skip(1)
 		if r.u8()&0x08 != 0 {
 			r.skip(1) // break secondary beams
 		}
 	}
-	return tempo
+	return b, tempo
 }
 
 func skipGPChord(r *reader, major int) {
@@ -94,23 +123,48 @@ func skipGPChord(r *reader, major int) {
 	}
 }
 
-func skipGPBeatEffects(r *reader, major int) {
+func readGPBeatEffects(r *reader, major int) score.Fx {
+	var fx score.Fx
+	// tapSlapPop is the technique of the byte after flag 0x20: 1 tapping, 2 slap, 3 pop.
+	tapSlapPop := func(v int) {
+		switch v {
+		case 0:
+			fx |= score.TremoloBar // GP3
+		case 1:
+			fx |= score.Tap
+		default:
+			fx |= score.Slap
+		}
+	}
 	if major == 3 {
 		f := r.u8()
+		if f&0x03 != 0 {
+			fx |= score.Vibrato
+		}
+		if f&0x0C != 0 {
+			fx |= score.Harmonic
+		}
 		if f&0x20 != 0 {
-			r.skip(1 + 4) // tapping/slap/pop or tremolo bar + value
+			tapSlapPop(r.u8())
+			r.skip(4) // tremolo bar value
 		}
 		if f&0x40 != 0 {
 			r.skip(2) // stroke
 		}
-		return
+		return fx
 	}
 	f1, f2 := r.u8(), r.u8()
+	if f1&0x02 != 0 {
+		fx |= score.Vibrato
+	}
 	if f1&0x20 != 0 {
-		r.skip(1) // tapping/slap/pop
+		if v := r.u8(); v != 0 {
+			tapSlapPop(v)
+		}
 	}
 	if f2&0x04 != 0 {
-		skipGPBend(r) // tremolo bar
+		fx |= score.TremoloBar
+		skipGPBend(r)
 	}
 	if f1&0x40 != 0 {
 		r.skip(2) // stroke
@@ -118,6 +172,7 @@ func skipGPBeatEffects(r *reader, major int) {
 	if f2&0x02 != 0 {
 		r.skip(1) // pick stroke
 	}
+	return fx
 }
 
 // readGPMixTable skips a mix-table change and returns its tempo, or -1.
@@ -158,10 +213,21 @@ func readGPMixTable(r *reader, major, minor int) int {
 	return tempo
 }
 
-func skipGPNote(r *reader, major int) {
+// readGPNote reads a note, all but its string.
+func readGPNote(r *reader, major int) score.Note {
+	var n score.Note
 	f := r.u8()
+	n.Ghost = f&0x04 != 0
+	if f&0x42 != 0 {
+		n.Fx |= score.Accent // accentuated, or (GP5) heavily
+	}
 	if f&0x20 != 0 {
-		r.skip(1) // note type
+		switch r.u8() { // note type
+		case 2:
+			n.Tie = true
+		case 3:
+			n.Dead = true
+		}
 	}
 	if major < 5 && f&0x01 != 0 {
 		r.skip(2) // duration, tuplet
@@ -170,7 +236,7 @@ func skipGPNote(r *reader, major int) {
 		r.skip(1) // velocity
 	}
 	if f&0x20 != 0 {
-		r.skip(1) // fret
+		n.Fret = r.u8()
 	}
 	if f&0x80 != 0 {
 		r.skip(2) // fingering
@@ -182,22 +248,43 @@ func skipGPNote(r *reader, major int) {
 		r.skip(1)
 	}
 	if f&0x08 != 0 {
-		skipGPNoteEffects(r, major)
+		n.Fx |= readGPNoteEffects(r, major)
 	}
+	return n
 }
 
-func skipGPNoteEffects(r *reader, major int) {
+func readGPNoteEffects(r *reader, major int) score.Fx {
+	var fx score.Fx
+	set := func(on bool, x score.Fx) {
+		if on {
+			fx |= x
+		}
+	}
 	if major == 3 {
 		f := r.u8()
+		set(f&0x01 != 0, score.Bend)
+		set(f&0x02 != 0, score.Legato)
+		set(f&0x04 != 0, score.Slide)
+		set(f&0x10 != 0, score.Grace)
 		if f&0x01 != 0 {
 			skipGPBend(r)
 		}
 		if f&0x10 != 0 {
 			r.skip(4) // grace note
 		}
-		return
+		return fx
 	}
 	f1, f2 := r.u8(), r.u8()
+	set(f1&0x01 != 0, score.Bend)
+	set(f1&0x02 != 0, score.Legato)
+	set(f1&0x10 != 0, score.Grace)
+	set(f2&0x01 != 0, score.Staccato)
+	set(f2&0x02 != 0, score.PalmMute)
+	set(f2&0x04 != 0, score.TremoloPicking)
+	set(f2&0x08 != 0, score.Slide)
+	set(f2&0x10 != 0, score.Harmonic)
+	set(f2&0x20 != 0, score.Trill)
+	set(f2&0x40 != 0, score.Vibrato)
 	if f1&0x01 != 0 {
 		skipGPBend(r)
 	}
@@ -228,6 +315,7 @@ func skipGPNoteEffects(r *reader, major int) {
 	if f2&0x20 != 0 {
 		r.skip(2) // trill: fret, period
 	}
+	return fx
 }
 
 func skipGPBend(r *reader) {

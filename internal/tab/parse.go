@@ -83,6 +83,11 @@ func readZipFile(f *zip.File) ([]byte, error) {
 		return nil, err
 	}
 	defer rc.Close()
+	if n := f.UncompressedSize64; n > 0 && n <= maxGPXSize { // read in one go when the size is plausible
+		buf := bytes.NewBuffer(make([]byte, 0, n+1))
+		_, err := buf.ReadFrom(rc)
+		return buf.Bytes(), err
+	}
 	return io.ReadAll(rc)
 }
 
