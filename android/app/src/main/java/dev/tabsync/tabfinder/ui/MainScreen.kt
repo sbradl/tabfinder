@@ -42,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,11 +62,12 @@ import dev.tabsync.tabfinder.data.Song
 import dev.tabsync.tabfinder.data.Tuning
 import dev.tabsync.tabfinder.theme.LocalStringColors
 import dev.tabsync.tabfinder.theme.Mono
+import kotlinx.coroutines.launch
 
 /**
- * The app's one screen, the same on Android and desktop. Platform glue comes in as parameters:
+ * The app's one screen; the desktop app (cmd/tabfinder) looks the same. Platform glue comes in as parameters:
  * [onPickFolder] chooses the tab folder (calling [MainViewModel.setRoot]), [onOpen] opens a song in
- * TuxGuitar and throws to report a failure, and [hasAccess]/[onRequestAccess] gate on Android's
+ * TuxGuitar and returns why it couldn't, if it couldn't, and [hasAccess]/[onRequestAccess] gate on Android's
  * file permission.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,7 +75,7 @@ import dev.tabsync.tabfinder.theme.Mono
 fun MainScreen(
   viewModel: MainViewModel,
   onPickFolder: () -> Unit,
-  onOpen: (root: String, song: Song) -> Unit,
+  onOpen: suspend (root: String, song: Song) -> String?,
   hasAccess: Boolean = true,
   onRequestAccess: () -> Unit = {},
 ) {
@@ -81,6 +83,7 @@ fun MainScreen(
   val input by viewModel.input.collectAsStateWithLifecycle()
   val results by viewModel.results.collectAsStateWithLifecycle()
   val snackbar = remember { SnackbarHostState() }
+  val scope = rememberCoroutineScope()
 
   LaunchedEffect(state.message) {
     state.message?.let {
@@ -147,7 +150,8 @@ fun MainScreen(
             SongList(
               songs,
               onOpen = { song ->
-                runCatching { onOpen(state.root!!, song) }.onFailure { viewModel.showMessage(it.message ?: "Couldn't open ${song.title}") }
+                val root = state.root!!
+                scope.launch { onOpen(root, song)?.let(viewModel::showMessage) }
               },
             )
           }
@@ -348,7 +352,7 @@ private fun SongRow(song: Song, modifier: Modifier = Modifier) {
         Column(Modifier.weight(1f)) {
           Text(song.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Text(
-            listOf(song.artist, song.album).filter { it.isNotBlank() }.joinToString(" · "),
+            song.subtitle,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -371,12 +375,11 @@ private fun SongRow(song: Song, modifier: Modifier = Modifier) {
 /** The opening tempo, large, with any later tempo changes beneath. */
 @Composable
 private fun TempoText(song: Song, modifier: Modifier = Modifier) {
-  val bpms = song.bpms
-  if (bpms.isEmpty()) return
+  if (song.tempo.isEmpty()) return
   Column(modifier, horizontalAlignment = Alignment.End) {
-    Text(bpms[0], fontFamily = Mono, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 24.sp)
+    Text(song.tempo, fontFamily = Mono, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 24.sp)
     Text(
-      if (bpms.size == 1) "BPM" else "→ " + bpms.drop(1).take(2).joinToString(" ") + if (bpms.size > 3) " …" else "",
+      song.tempoDetail,
       style = MaterialTheme.typography.labelSmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

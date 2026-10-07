@@ -12,16 +12,11 @@ import (
 	"tabfinder/internal/tab"
 )
 
-// isolate points the package's config, cache and index paths at temp dirs, so
-// no test touches the real ~/.config/tabfinder or ~/.cache/tabfinder.
-func isolate(t testing.TB) (config, cache string) {
+// isolate gives the app temp dirs, so no test touches the real ~/.config/tabfinder or ~/.cache/tabfinder.
+func isolate(t testing.TB) dirs {
 	t.Helper()
-	oldConfig, oldCache, oldIndex := configDir, cacheDir, indexFile
 	dir := t.TempDir()
-	configDir, cacheDir = filepath.Join(dir, "config"), filepath.Join(dir, "cache")
-	indexFile = filepath.Join(cacheDir, "index.jsonl")
-	t.Cleanup(func() { configDir, cacheDir, indexFile = oldConfig, oldCache, oldIndex })
-	return configDir, cacheDir
+	return dirs{filepath.Join(dir, "config"), filepath.Join(dir, "cache")}
 }
 
 // fakeTools puts shell scripts named after the tools in a temp dir that is the
@@ -84,30 +79,23 @@ func TestXDGDir(t *testing.T) {
 // U-DSK-02
 func TestLoadSaveRoot(t *testing.T) {
 	t.Run("no config", func(t *testing.T) {
-		isolate(t)
-		if got := loadRoot(); got != "" {
-			t.Errorf("root = %q", got)
-		}
-	})
-	t.Run("no config, legacy settings", func(t *testing.T) {
-		config, _ := isolate(t)
-		os.MkdirAll(config, 0o755)
-		os.WriteFile(filepath.Join(config, "settings.properties"), []byte("root=/old/Tabs\n"), 0o644)
-		if got := loadRoot(); got != "/old/Tabs" {
+		d := isolate(t)
+		if got, _ := d.loadRoot(); got != "" {
 			t.Errorf("root = %q", got)
 		}
 	})
 	t.Run("round trip", func(t *testing.T) {
-		config, _ := isolate(t)
+		d := isolate(t)
+		config := d.config
 		for _, root := range []string{"/home/me/Guitar/Tabs", "/tmp/Äther & \"Quotes\" ü", ""} {
-			if err := saveRoot(root); err != nil {
+			if err := d.saveRoot(root); err != nil {
 				t.Fatal(err)
 			}
-			if got := loadRoot(); got != root {
+			if got, _ := d.loadRoot(); got != root {
 				t.Errorf("loaded %q, saved %q", got, root)
 			}
 		}
-		saveRoot("/x")
+		d.saveRoot("/x")
 		b, _ := os.ReadFile(filepath.Join(config, "config.json"))
 		if string(b) != "{\n  \"root\": \"/x\"\n}\n" {
 			t.Errorf("config.json = %q", b)
@@ -117,78 +105,26 @@ func TestLoadSaveRoot(t *testing.T) {
 			t.Errorf("config dir: %v", st.Mode())
 		}
 	})
-	t.Run("config wins over legacy", func(t *testing.T) {
-		config, _ := isolate(t)
-		saveRoot("/new")
-		os.WriteFile(filepath.Join(config, "settings.properties"), []byte("root=/old\n"), 0o644)
-		if got := loadRoot(); got != "/new" {
-			t.Errorf("root = %q", got)
-		}
-	})
-	t.Run("an empty saved root doesn't fall back to legacy", func(t *testing.T) {
-		config, _ := isolate(t)
-		saveRoot("")
-		os.WriteFile(filepath.Join(config, "settings.properties"), []byte("root=/old\n"), 0o644)
-		if got := loadRoot(); got != "" {
-			t.Errorf("root = %q", got)
-		}
-	})
 	t.Run("corrupt config", func(t *testing.T) {
-		config, _ := isolate(t)
+		d := isolate(t)
+		config := d.config
 		os.MkdirAll(config, 0o755)
 		for _, bad := range []string{"{", "not json", "[1]", `{"root": 5}`, "\x00\x01", ""} {
 			os.WriteFile(filepath.Join(config, "config.json"), []byte(bad), 0o644)
-			if got := loadRoot(); got != "" {
-				t.Errorf("%q: root = %q", bad, got)
+			if got, err := d.loadRoot(); got != "" || err == nil || !strings.Contains(err.Error(), "config.json") {
+				t.Errorf("%q: root = %q, err = %v", bad, got, err)
 			}
 		}
 	})
 	t.Run("config dir can't be made", func(t *testing.T) {
-		config, _ := isolate(t)
+		d := isolate(t)
+		config := d.config
 		os.MkdirAll(filepath.Dir(config), 0o755)
 		os.WriteFile(config, []byte("a file"), 0o644) // where the directory should go
-		if err := saveRoot("/x"); err == nil {
+		if err := d.saveRoot("/x"); err == nil {
 			t.Error("no error")
 		}
 	})
-}
-
-// U-DSK-03
-func TestLegacyRoot(t *testing.T) {
-	read := func(content string) string {
-		config, _ := isolate(t)
-		os.MkdirAll(config, 0o755)
-		os.WriteFile(filepath.Join(config, "settings.properties"), []byte(content), 0o644)
-		return legacyRoot()
-	}
-	for _, tt := range []struct{ name, content, want string }{
-		{"among others", "# saved\nwindow=big\nroot=/home/me/Tabs\ntheme=dark\n", "/home/me/Tabs"},
-		{"escapes", `root=/home/me/C\:\\Tabs\=x\ y`, `/home/me/C:\Tabs=x y`},
-		{"unicode escape", `root=/home/me/Gitarre\u00e4\u00DF`, "/home/me/Gitarreäß"},
-		{"surrounding whitespace", "   root=/a/b  \r\n", "/a/b"},
-		{"no root line", "window=big\nrootx=/no\n# root=/commented\n", ""},
-		{"empty value", "root=\n", ""},
-		{"first wins", "root=/first\nroot=/second\n", "/first"},
-		{"no trailing newline", "root=/a", "/a"},
-		{"empty file", "", ""},
-	} {
-		if got := read(tt.content); got != tt.want {
-			t.Errorf("%s: legacyRoot = %q, want %q", tt.name, got, tt.want)
-		}
-	}
-	t.Run("file missing", func(t *testing.T) {
-		isolate(t)
-		if got := legacyRoot(); got != "" {
-			t.Errorf("legacyRoot = %q", got)
-		}
-	})
-	for in, want := range map[string]string{
-		`a\:b`: "a:b", `a\=b`: "a=b", `a\\b`: `a\b`, `\u00e4`: "ä", `\u0041\u0042`: "AB", "plain": "plain", "": "", `trailing\\`: `trailing\`,
-	} {
-		if got := unescapeProperty(in); got != want {
-			t.Errorf("unescapeProperty(%q) = %q, want %q", in, got, want)
-		}
-	}
 }
 
 // U-DSK-04
@@ -237,6 +173,12 @@ func TestPickFolder(t *testing.T) {
 			t.Errorf("args = %q", args)
 		}
 	})
+	t.Run("a dialog that fails is an error, not a cancel", func(t *testing.T) {
+		fakeTools(t, map[string]string{"kdialog": "echo 'cannot connect to X server' >&2; exit 2"})
+		if got, err := pickFolder("/x"); got != "" || err == nil || !strings.Contains(err.Error(), "cannot connect") {
+			t.Errorf("got %q, %v", got, err)
+		}
+	})
 	t.Run("zenity cancelled", func(t *testing.T) {
 		fakeTools(t, map[string]string{"zenity": "exit 1"})
 		if got, err := pickFolder("/x"); got != "" || err != nil {
@@ -272,26 +214,27 @@ func TestOpenInTuxGuitar(t *testing.T) {
 	os.WriteFile(filepath.Join(root, "A", "wrong.gp3"), []byte("wrong"), 0o644)
 
 	t.Run("correctly named: the original is opened in place", func(t *testing.T) {
-		isolate(t)
+		d := isolate(t)
 		dir := fakeTools(t, map[string]string{"tuxguitar": record})
-		err := openInTuxGuitar(root, &tab.Song{Path: "A/right.gp5", Format: "gp5", Title: "Right"})
+		err := d.openInTuxGuitar(root, &tab.Song{Path: "A/right.gp5", Format: "gp5", Title: "Right"})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if args := calledWith(t, dir, "tuxguitar"); !slices.Equal(args, []string{filepath.Join(root, "A", "right.gp5")}) {
 			t.Errorf("args = %q", args)
 		}
-		if _, err := os.Stat(filepath.Join(cacheDir, "open")); err == nil {
+		if _, err := os.Stat(filepath.Join(d.cache, "open")); err == nil {
 			t.Error("a copy was made")
 		}
 	})
 	t.Run("misnamed: a copy with the real extension, overwriting an older one", func(t *testing.T) {
-		_, cache := isolate(t)
+		d := isolate(t)
+		cache := d.cache
 		dir := fakeTools(t, map[string]string{"tuxguitar": record})
 		copyPath := filepath.Join(cache, "open", "Wrong Song.gp5")
 		os.MkdirAll(filepath.Dir(copyPath), 0o755)
 		os.WriteFile(copyPath, []byte("an older, longer copy of another song"), 0o644)
-		err := openInTuxGuitar(root, &tab.Song{Path: "A/wrong.gp3", Format: "gp5", Title: "Wrong: Song!"})
+		err := d.openInTuxGuitar(root, &tab.Song{Path: "A/wrong.gp3", Format: "gp5", Title: "Wrong: Song!"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -306,30 +249,30 @@ func TestOpenInTuxGuitar(t *testing.T) {
 		}
 	})
 	t.Run("source missing", func(t *testing.T) {
-		isolate(t)
+		d := isolate(t)
 		dir := fakeTools(t, map[string]string{"tuxguitar": record})
-		err := openInTuxGuitar(root, &tab.Song{Path: "A/gone.gp3", Format: "gp5", Title: "Gone"})
+		err := d.openInTuxGuitar(root, &tab.Song{Path: "A/gone.gp3", Format: "gp5", Title: "Gone"})
 		if err == nil {
 			t.Fatal("no error")
 		}
 		neverCalled(t, dir, "tuxguitar")
 	})
 	t.Run("tuxguitar missing", func(t *testing.T) {
-		isolate(t)
+		d := isolate(t)
 		fakeTools(t, nil)
 		for _, s := range []*tab.Song{
 			{Path: "A/right.gp5", Format: "gp5", Title: "Right"},
 			{Path: "A/wrong.gp3", Format: "gp5", Title: "Wrong"},
 		} {
-			if err := openInTuxGuitar(root, s); err == nil || err.Error() != "TuxGuitar is not installed" {
+			if err := d.openInTuxGuitar(root, s); err == nil || err.Error() != "TuxGuitar is not installed" {
 				t.Errorf("%s: err = %v", s.Path, err)
 			}
 		}
 	})
 	t.Run("the process is reaped", func(t *testing.T) {
-		isolate(t)
+		d := isolate(t)
 		dir := fakeTools(t, map[string]string{"tuxguitar": `printf '%s' "$$" > "$0.pid"` + "\n"})
-		if err := openInTuxGuitar(root, &tab.Song{Path: "A/right.gp5", Format: "gp5", Title: "Right"}); err != nil {
+		if err := d.openInTuxGuitar(root, &tab.Song{Path: "A/right.gp5", Format: "gp5", Title: "Right"}); err != nil {
 			t.Fatal(err)
 		}
 		var pid int

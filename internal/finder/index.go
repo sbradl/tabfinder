@@ -5,10 +5,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 
 	"tabfinder/internal/tab"
 )
@@ -52,7 +51,9 @@ func ScanIndex(root, path string) ([]*tab.Song, error) {
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	for _, s := range songs {
-		enc.Encode(s)
+		if err := enc.Encode(s); err != nil {
+			return songs, fmt.Errorf("%s: %w", s.Path, err)
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return songs, err
@@ -65,37 +66,4 @@ func ScanIndex(root, path string) ([]*tab.Song, error) {
 		return songs, err
 	}
 	return songs, scanErr
-}
-
-// tabscan format -> the extension TuxGuitar expects; the rest match already.
-var extensions = map[string]string{"gp6": "gpx", "gp7": "gp"}
-
-var unsafeName = regexp.MustCompile(`[^\p{L}\p{N} _-]`)
-
-// TuxGuitarName is a clean file name TuxGuitar can open s under: the title
-// with the extension of its real format. Originals may be misnamed
-// (.crdownload, .zip, wrong gp version), and TuxGuitar's Android path
-// patterns fail on names with many dots.
-func TuxGuitarName(s *tab.Song) string {
-	title := strings.TrimSpace(unsafeName.ReplaceAllString(s.Title, ""))
-	if title == "" {
-		title = "song"
-	}
-	return title + "." + tuxGuitarExt(s)
-}
-
-// OpensInPlace reports whether s already has the extension of its real
-// format, so TuxGuitar on the desktop can open (and save) the original.
-func OpensInPlace(s *tab.Song) bool {
-	return strings.EqualFold(filepath.Ext(s.Path), "."+tuxGuitarExt(s))
-}
-
-func tuxGuitarExt(s *tab.Song) string {
-	if ext := extensions[s.Format]; ext != "" {
-		return ext
-	}
-	if s.Format != "" {
-		return s.Format
-	}
-	return strings.TrimPrefix(strings.ToLower(filepath.Ext(s.Path)), ".")
 }

@@ -55,7 +55,7 @@ func TestFirstRunChoosesFolder(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	h := newHarnessWith(t, harnessOpts{noConfig: true, tools: chooser(root)})
-	oldIndex := indexFile
+	oldIndex := h.u.dirs.index()
 	if h.u.root != "" {
 		t.Fatalf("root = %q with no config", h.u.root)
 	}
@@ -76,10 +76,10 @@ func TestFirstRunChoosesFolder(t *testing.T) {
 		t.Errorf("kdialog args = %q (the start folder is the home folder)", args)
 	}
 	h.waitFor("the scan", func() bool { return h.u.root == root && !h.u.scanning && len(h.u.lib.Entries) == 20 })
-	if got := loadRoot(); got != root {
+	if got, _ := h.u.dirs.loadRoot(); got != root {
 		t.Errorf("saved root = %q", got)
 	}
-	if b, _ := os.ReadFile(filepath.Join(configDir, "config.json")); !strings.Contains(string(b), root) {
+	if b, _ := os.ReadFile(filepath.Join(h.u.dirs.config, "config.json")); !strings.Contains(string(b), root) {
 		t.Errorf("config.json = %s", b)
 	}
 	// The old index is gone, the new scan is cached.
@@ -112,10 +112,10 @@ func TestCancelFolderDialog(t *testing.T) {
 	if h.u.root != "" || h.u.scanning || h.u.message != "" || len(h.u.lib.Entries) != before {
 		t.Errorf("state changed: root %q scanning %v message %q entries %d", h.u.root, h.u.scanning, h.u.message, len(h.u.lib.Entries))
 	}
-	if _, err := os.Stat(filepath.Join(configDir, "config.json")); err == nil {
+	if _, err := os.Stat(filepath.Join(h.u.dirs.config, "config.json")); err == nil {
 		t.Error("config.json written")
 	}
-	if _, err := os.Stat(indexFile); err != nil {
+	if _, err := os.Stat(h.u.dirs.index()); err != nil {
 		t.Error("index deleted")
 	}
 }
@@ -130,20 +130,6 @@ func TestNoDialogProgram(t *testing.T) {
 	}
 	if h.u.root != "" || h.u.scanning {
 		t.Error("state changed")
-	}
-}
-
-// E-DSK-04
-func TestLegacySettings(t *testing.T) {
-	root := testlib.Tree(t)
-	h := newHarnessWith(t, harnessOpts{noConfig: true, noIndex: true, legacy: "root=" + strings.ReplaceAll(root, ":", `\:`) + "\n"})
-	if h.u.root != root {
-		t.Fatalf("root = %q, want %q", h.u.root, root)
-	}
-	// With no cached index, it scans that folder at once.
-	h.waitFor("the scan", func() bool { return !h.u.scanning && len(h.u.lib.Entries) == 20 })
-	if _, err := os.Stat(filepath.Join(configDir, "config.json")); err == nil {
-		t.Error("the legacy settings were rewritten as config.json by just starting")
 	}
 }
 
@@ -264,7 +250,7 @@ func TestRescanButton(t *testing.T) {
 		t.Errorf("subtitle = %q", got)
 	}
 	// The scan is cached for the next start.
-	if b, _ := os.ReadFile(indexFile); strings.Count(string(b), "\n") != 20 {
+	if b, _ := os.ReadFile(h.u.dirs.index()); strings.Count(string(b), "\n") != 20 {
 		t.Errorf("index has %d lines", strings.Count(string(b), "\n"))
 	}
 	// A scan of a folder that is gone says so and keeps the list.
@@ -273,5 +259,14 @@ func TestRescanButton(t *testing.T) {
 	h.waitFor("the failure", func() bool { return !h.u.scanning })
 	if !strings.HasPrefix(h.u.message, "Scan failed: ") || len(h.u.lib.Entries) != 20 {
 		t.Errorf("message %q, %d entries", h.u.message, len(h.u.lib.Entries))
+	}
+}
+
+// A config.json that can't be read is said, not taken for "no folder chosen" in silence.
+func TestCorruptConfigIsReported(t *testing.T) {
+	h := newHarnessWith(t, harnessOpts{noConfig: true, config: "{not json"})
+	h.frame()
+	if h.u.root != "" || !strings.HasPrefix(h.u.message, "Couldn't read the settings: ") || !strings.Contains(h.u.message, "config.json") {
+		t.Errorf("root %q, message %q", h.u.root, h.u.message)
 	}
 }

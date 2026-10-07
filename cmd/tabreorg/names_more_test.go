@@ -62,14 +62,14 @@ func TestCleanAlbumMore(t *testing.T) {
 		"Rhythm Star World Tour":         "",
 		"Tabbed by Someone":              "",
 		"Not Released Yet":               "",
-		"dreizehn":                       "13",
+		"siebzehn":                       "17",
 		"BEAST":                          "Beast",
 		"Ep Micro":                       "Micro",
-		"Weaver(Teal)":                   "Weaver (Teal Album)",
+		"Ferret(Mauve)":                  "Ferret (Mauve Album)",
 		"Helsinki Syndrom":               "Helsinki Syndrome",
-		"Runter mit den Pantoffeln Unsichtbarer!": "Runter mit den Pantoffeln, Unsichtbarer!",
+		"Hoch mit den Gardinen Nachbar!": "Hoch mit den Gardinen, Nachbar!",
 	} {
-		if got := cleanAlbum(in); got != want {
+		if got := testRules.cleanAlbum(in); got != want {
 			t.Errorf("cleanAlbum(%q) = %q, want %q", in, got, want)
 		}
 	}
@@ -138,16 +138,18 @@ func TestFilenameKey(t *testing.T) {
 		{"X/Song (live).gp5", "", "song"},
 		{"X/Song v3.gp5", "", "song"},
 		{"X/Song - 779.gp5", "", "song"},
+		{"X/Song - Acoustic Version.gp5", "", "song"},
+		{"Argyle Moth/Argyle Moth - Nectar - Live.gp5", "Argyle Moth", "nectar"},
 		{"X/Song.gpx.crdownload", "", "song"},
 		{"X/Song.gp5.zip", "", "song"},
-		{"X/www-tablatures-tk @ Song.gp4", "", "song"},
+		{"X/www-example-tk @ Song.gp4", "", "song"},
 		{"Song.gp5", "", "song"},
 		{"X/The Song.gp5", "", "song"},
 		{"X/Song Of Songs.gp5", "", "songofsongs"},
 		{"Nectar/Nectar.gp5", "Nectar", "nectar"}, // the key is never cut down to nothing
 	} {
-		if got := filenameKey(&tab.Song{Path: tt.path, Artist: tt.artist}); got != tt.want {
-			t.Errorf("filenameKey(%q, artist %q) = %q, want %q", tt.path, tt.artist, got, tt.want)
+		if got := testRules.filenameKey(&tab.Song{Path: tt.path, Artist: tt.artist}); got != tt.want {
+			t.Errorf("testRules.filenameKey(%q, artist %q) = %q, want %q", tt.path, tt.artist, got, tt.want)
 		}
 	}
 }
@@ -166,8 +168,8 @@ func TestSongKey(t *testing.T) {
 		{"same title, different spelling", "X/Nectar.gp5", "NECTAR!", "file", "", "nectar"},
 		{"title longer than the file name", "X/nec.gp5", "Nectar", "file", "", "nectar"},
 	} {
-		s := &tab.Song{Path: tt.path, Title: tt.title, TitleSource: tt.titleSource, Artist: tt.a}
-		if got := songKey(s); got != tt.want {
+		s := &tab.Song{Path: tt.path, Title: tt.title, TitleSource: tab.Source(tt.titleSource), Artist: tt.a}
+		if got := testRules.songKey(s); got != tt.want {
 			t.Errorf("%s: songKey = %q, want %q", tt.name, got, tt.want)
 		}
 	}
@@ -194,24 +196,9 @@ func TestSongNameMore(t *testing.T) {
 		{"junk title", "A/B/nectar.gp5", "A", "Unknown", "file", "Nectar"},
 		{"umlauts", "Die Äther/x/ruf_nach_sonne.gp4", "Die Äther", "Ruf nach Sonne", "file", "Ruf nach Sonne"},
 	} {
-		s := &tab.Song{Path: tt.path, Artist: tt.artist, Title: tt.title, TitleSource: tt.titleSource}
-		if got := songName(s); got != tt.want {
-			t.Errorf("%s: songName(%q) = %q, want %q", tt.name, tt.path, got, tt.want)
-		}
-	}
-}
-
-func TestTitleCase(t *testing.T) {
-	for in, want := range map[string]string{
-		"":                      "",
-		"hello world":           "Hello World",
-		"  multiple   spaces  ": "Multiple Spaces",
-		"äther öl":              "Äther Öl",
-		"ALREADY upper":         "ALREADY Upper",
-		"x":                     "X",
-	} {
-		if got := titleCase(in); got != want {
-			t.Errorf("titleCase(%q) = %q, want %q", in, got, want)
+		s := &tab.Song{Path: tt.path, Artist: tt.artist, Title: tt.title, TitleSource: tab.Source(tt.titleSource)}
+		if got := testRules.songName(s); got != tt.want {
+			t.Errorf("%s: testRules.songName(%q) = %q, want %q", tt.name, tt.path, got, tt.want)
 		}
 	}
 }

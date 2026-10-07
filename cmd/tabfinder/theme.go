@@ -12,7 +12,7 @@ import (
 	"gioui.org/unit"
 )
 
-// The Android app's theme (tabfinder/shared/.../theme), ported: amp and fretboard, graphite
+// The Android app's theme (android/app/src/main/java/dev/tabsync/tabfinder/theme), ported: amp and fretboard, graphite
 // neutrals with a slight blue bias, brass (fret wire, amp knobs) as the accent.
 
 type palette struct {

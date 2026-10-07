@@ -10,20 +10,20 @@ import (
 )
 
 var (
-	reJunkArtist = regexp.MustCompile(`(?i)^(|-|unknown|unbekannt|anonim|various|track \d+)$`)
-	reJunkAlbum  = regexp.MustCompile(`(?i)^(|-|\?+|single|ep|s/t|self[- ]titled|unknown|unbekannt|keine ahnung|untitled` +
+	// Names that mean no artist or no album, in any library; a config adds its own (junkArtists, junkAlbums).
+	reJunkArtist = regexp.MustCompile(`(?i)^(|-|unknown|various|track \d+)$`)
+	reJunkAlbum  = regexp.MustCompile(`(?i)^(|-|\?+|single|ep|s/t|self[- ]titled|unknown|untitled` +
 		`|tabbed by.*|.*not released.*|\(.*\))$`)
-	reTuningSuffix = regexp.MustCompile(`(?i)([ _-](c#|c|d|e|eb|b|drop ?[a-g]b?|eadgbe|cgcfad|afadgc|e accoustic( orig)?|accoustic` +
-		`|7string|6string|oneguitar|withbass|lyrics|live|andere?solofingersatz))+$`)
+	// Tunings and arrangements at the end of a file name ("song_drop_c", "song 7string"); a config
+	// adds its own (fileSuffixes).
+	tuningSuffixes  = `c#|c|d|e|eb|b|drop ?[a-g]b?|eadgbe|cgcfad|afadgc|7string|6string|lyrics|live`
 	reYearParen     = regexp.MustCompile(`[\(\[]\s*\d{4}\s*[\)\]]`)
 	reYearLead      = regexp.MustCompile(`^\d{4}\s*-\s*`)
 	reArticle       = regexp.MustCompile(`^(the|die)\s+`)
-	reSpaces        = regexp.MustCompile(`\s+`)
 	reWholeParen    = regexp.MustCompile(`^\(.*\)$`)
 	reTrailingParen = regexp.MustCompile(`\s+\(.*\)$`)
 	reAnyParen      = regexp.MustCompile(`\(.*?\)|\[.*?\]`)
 	reFileNoise     = regexp.MustCompile(`(?i)\(.*?\)|\bver ?\d+\b|\bv\d+\b| - \d+$`)
-	reVersionTag    = regexp.MustCompile(`(?i)\s*\((ver ?\d+[^)]*|\d+|pro|complete)\)`)
 )
 
 // key is a loose comparison key: case, punctuation, years and a leading
@@ -41,17 +41,18 @@ func key(s string) string {
 	}, s)
 }
 
-func cleanAlbum(name string) string {
-	name = strings.TrimSpace(reSpaces.ReplaceAllString(name, " "))
+// cleanAlbum is the folder name for an album name found in a file, or "" for no album.
+func (r nameRules) cleanAlbum(name string) string {
+	name = strings.Join(strings.Fields(name), " ")
 	name = reYearLead.ReplaceAllString(name, "") // leading "1978 - "
 	if !reWholeParen.MatchString(name) {
 		name = reTrailingParen.ReplaceAllString(name, "") // trailing (2008) / (subtitle)
 	}
-	if alias, ok := aliasesByKey[key(name)]; ok {
+	if alias, ok := r.aliases[key(name)]; ok {
 		name = alias
 	}
 	name = strings.TrimSpace(strings.TrimRight(name, "."))
-	if reJunkAlbum.MatchString(name) || (reJunkExtra != nil && reJunkExtra.MatchString(name)) {
+	if reJunkAlbum.MatchString(name) || (r.junk != nil && r.junk.MatchString(name)) {
 		return ""
 	}
 	return strings.ReplaceAll(name, "/", "-")
@@ -96,16 +97,13 @@ func nicest(names []string) string {
 }
 
 // filenameKey is the song-title key derived from the file name alone.
-func filenameKey(s *tab.Song) string {
-	name := filepath.Base(s.Path)
-	for _, ext := range []string{".crdownload", ".zip"} {
-		name = strings.TrimSuffix(name, ext)
-	}
-	name = strings.TrimSuffix(name, filepath.Ext(name))
-	name = strings.ReplaceAll(strings.TrimPrefix(name, "www-tablatures-tk @ "), "_", " ")
-	name = strings.TrimSpace(reFileNoise.ReplaceAllString(name, ""))
+func (r nameRules) filenameKey(s *tab.Song) string {
+	name := strings.TrimSpace(reFileNoise.ReplaceAllString(tab.BareName(filepath.Base(s.Path)), ""))
 	parts := strings.Split(name, " - ")
-	k := key(reTuningSuffix.ReplaceAllString(parts[len(parts)-1], ""))
+	for len(parts) > 1 && tab.IsVariant(parts[len(parts)-1]) {
+		parts = parts[:len(parts)-1] // a variant of the song is the same song
+	}
+	k := key(r.dropSuffixes(parts[len(parts)-1]))
 	for _, artist := range []string{strings.SplitN(s.Path, "/", 2)[0], s.Artist} {
 		if ak := key(artist); ak != "" && strings.HasPrefix(k, ak) && len(k) > len(ak) {
 			k = k[len(ak):]
@@ -123,9 +121,9 @@ func filenameKey(s *tab.Song) string {
 // songKey identifies a song for duplicate detection. The file name wins
 // when the title field contradicts it (e.g. title "Eisenmond" in
 // "Eisenmond - Heimatland.gp5").
-func songKey(s *tab.Song) string {
-	fk := filenameKey(s)
-	if s.TitleSource == "path" {
+func (r nameRules) songKey(s *tab.Song) string {
+	fk := r.filenameKey(s)
+	if s.TitleSource == tab.FromPath {
 		return fk
 	}
 	full := key(s.Title) // keeps "(Part 2)" etc. for the consistency check
@@ -144,38 +142,26 @@ var unsafeChars = strings.NewReplacer("/", "-", "\\", "-", ":", " -", `"`, "", "
 // title from the file when it agrees with the file name, otherwise the
 // title derived from the file name. Version tags, tuning suffixes and the
 // artist prefix are dropped.
-func songName(s *tab.Song) string {
-	fromFile := reTuningSuffix.ReplaceAllString(s.FilenameTitle(), "")
+func (r nameRules) songName(s *tab.Song) string {
+	fromFile := r.dropSuffixes(s.FilenameTitle())
 	name := fromFile
-	if s.TitleSource == "file" {
-		meta := tab.JunkBracket.ReplaceAllString(s.Title, "")
-		meta = strings.TrimSpace(reVersionTag.ReplaceAllString(meta, ""))
+	if s.TitleSource == tab.FromFile {
+		meta := tab.StripTags(s.Title)
 		if a, rest, ok := strings.Cut(meta, " - "); ok && key(a) == key(s.Artist) {
 			meta = rest
 		}
 		mk, fk := key(meta), key(fromFile)
-		if mk != "" && !reJunkArtist.MatchString(meta) && (strings.Contains(fk, mk) || strings.Contains(mk, fk)) {
+		if mk != "" && !r.junkArtistName(meta) && (strings.Contains(fk, mk) || strings.Contains(mk, fk)) {
 			name = meta
 		}
 	}
 	name = unsafeChars.Replace(name)
-	name = strings.Trim(reSpaces.ReplaceAllString(name, " "), ` '´`+"`")
+	name = strings.Trim(strings.Join(strings.Fields(name), " "), ` '´`+"`")
 	name = strings.TrimSpace(strings.TrimRight(name, ". "))
 	if name == strings.ToLower(name) {
-		name = titleCase(name)
+		name = tab.TitleCase(name)
 	}
 	return name
-}
-
-// titleCase upper-cases the first letter of every word.
-func titleCase(s string) string {
-	words := strings.Fields(s)
-	for i, w := range words {
-		r := []rune(w)
-		r[0] = unicode.ToUpper(r[0])
-		words[i] = string(r)
-	}
-	return strings.Join(words, " ")
 }
 
 // tabExt returns the extension to keep, including a wrapper such as ".gp3.zip".

@@ -27,15 +27,15 @@ func TestRatioMatchesDifflib(t *testing.T) {
 
 func TestCleanAlbum(t *testing.T) {
 	tests := map[string]string{
-		"Dawn of the Copper Giant (2008)":       "Dawn of the Copper Giant",
-		"1978 - Who Are They":                   "Who Are They",
-		"Cobalt Drizle":                         "Cobalt Drizzle",
-		"(Single - 2021)":                       "",
-		"Fallow/Daybreak Soundtrack":            "Fallow",
-		"Das ist nicht die ganze Geschichte...": "Das ist nicht die ganze Geschichte",
+		"Dawn of the Copper Giant (2008)":   "Dawn of the Copper Giant",
+		"1978 - Who Are They":               "Who Are They",
+		"Cobalt Drizle":                     "Cobalt Drizzle",
+		"(Single - 2021)":                   "",
+		"Fallow/Daybreak Soundtrack":        "Fallow",
+		"Das ist nicht das ganze Rezept...": "Das ist nicht das ganze Rezept",
 	}
 	for in, want := range tests {
-		if got := cleanAlbum(in); got != want {
+		if got := testRules.cleanAlbum(in); got != want {
 			t.Errorf("cleanAlbum(%q) = %q, want %q", in, got, want)
 		}
 	}
@@ -57,7 +57,7 @@ func TestSongName(t *testing.T) {
 		{"Argyle Moth/Lantern Machine/nectar_ver3_E.gp5", "Argyle Moth", "Nectar", "file", "Nectar"},
 		{"Eisenmond/Eisenmond - Heimatland.gp5", "Heimatland", "Eisenmond", "file", "Heimatland"},
 		{"Megalith Dusk/Moss in Peace/Megalith Dusk - Hangar 22 (2).gp3", "Megalith Dusk", "someone@example.com  Hanger 22", "file", "Hangar 22"},
-		{"Deepstones/Around the Moss/My_own_summer.gp4", "Deepstones", "My Own Summer", "file", "My Own Summer"},
+		{"Deepstones/Around the Moss/My_own_lantern.gp4", "Deepstones", "My Own Lantern", "file", "My Own Lantern"},
 		{"Inkwell Flamingos/The Harlequin Race/Inkwell Flamingos - The Harlequins Dance (ver 3 by X).gp5", "Inkwell Flamingos", "Inkwell Flamingos - The Harlequin's Dance", "file", "The Harlequin's Dance"},
 		{"As Lanterns Fade/Echoes are quiet/ripple_ver2_DropD.gp3", "As Lanterns Fade", "Ripple", "path", "Ripple"},
 		{"Kern/Take a look in the window/yall_want_a.gp4", "Kern", "Ya'll Want A Ticket", "file", "Ya'll Want A Ticket"},
@@ -65,11 +65,12 @@ func TestSongName(t *testing.T) {
 		{"Sodbury Lane/Agent Marmalade/indigo.gp4", "Sodbury Lane", "Indigo [by drummer@example.com]", "file", "Indigo"},
 		{"Argyle Moth/Will to Wander/Argyle Moth - The Heron Flies Alone (ver 2 by tabber42).gpx", "Argyle Moth", "The Heron Flies Alone''", "file", "The Heron Flies Alone"},
 		{"Cousins of Marrow/Marrow Covers/Cousins Of Marrow - No Orders.gp4", "Cousins of Marrow", "no orders (cover)", "file", "No Orders (cover)"},
+		{"Argyle Moth/Nectar - Acoustic Version.gp5", "Argyle Moth", "", "path", "Nectar - Acoustic Version"}, // a variant, not "Artist - Title"
 	}
 	for _, tt := range tests {
-		s := &tab.Song{Path: tt.path, Artist: tt.artist, Title: tt.title, TitleSource: tt.titleSource}
-		if got := songName(s); got != tt.want {
-			t.Errorf("songName(%q) = %q, want %q", tt.path, got, tt.want)
+		s := &tab.Song{Path: tt.path, Artist: tt.artist, Title: tt.title, TitleSource: tab.Source(tt.titleSource)}
+		if got := testRules.songName(s); got != tt.want {
+			t.Errorf("testRules.songName(%q) = %q, want %q", tt.path, got, tt.want)
 		}
 	}
 }

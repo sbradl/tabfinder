@@ -36,7 +36,7 @@ class FakeSource(override var root: String? = null) : TabSource {
   var scanGate: CompletableDeferred<Unit>? = null
   var searchDelays: (Query) -> Long = { 0 }
   var searchFails: (Query) -> Throwable? = { null }
-  var searchAnswer: (Query) -> SearchResult = { SearchResult(matches = saved.indices.toList()) }
+  var searchAnswer: (Query) -> SearchResult = { SearchResult(matches = saved.map { it.path }) }
 
   val loads = mutableListOf<Unit>()
   val scans = mutableListOf<String?>()
@@ -192,7 +192,7 @@ class MainViewModelTest {
     val source = FakeSource("/tabs").apply { saved = listOf(song("x")) }
     val vm = vm(source)
     advanceUntilIdle()
-    source.scanResult = Result.success(ScanResult(listOf(song("a"), song("b"), song("c")), unreadable = 2))
+    source.scanResult = Result.success(ScanResult(listOf(song("a"), song("b"), song("c")), unreadable = 2, summary = "3 tabs, 2 unreadable"))
     vm.rescan()
     advanceUntilIdle()
     assertEquals("3 tabs, 2 unreadable", vm.state.value.message)
@@ -250,7 +250,7 @@ class MainViewModelTest {
       saved = listOf(song("One"), song("Two"), song("Three"))
       // The earlier the query, the slower the answer: they'd arrive in reverse order.
       searchDelays = { 100L * (5 - it.name.length) }
-      searchAnswer = { q -> SearchResult(matches = listOf(q.name.length - 1)) }
+      searchAnswer = { q -> SearchResult(matches = listOf(saved[q.name.length - 1].path)) }
     }
     val vm = vm(source)
     advanceUntilIdle()
@@ -268,14 +268,37 @@ class MainViewModelTest {
   }
 
   @Test
-  fun `the songs a search matched are looked up by index, ignoring stale ones`() = runTest(dispatcher) {
+  fun `the songs a search matched are looked up by path, ignoring unknown ones`() = runTest(dispatcher) {
     val source = FakeSource("/tabs").apply {
       saved = listOf(song("One"), song("Two"))
-      searchAnswer = { SearchResult(matches = listOf(1, 7, 0, -1)) } // 7 and -1 are outside the list
+      searchAnswer = { SearchResult(matches = listOf("A/Two.gp5", "A/Seven.gp5", "A/One.gp5")) } // Seven is from a newer scan
     }
     val vm = vm(source)
     advanceUntilIdle()
     assertEquals(listOf("Two", "One"), vm.results.value!!.songs.map { it.title })
+  }
+
+  @Test
+  fun `messages and the scanning flag don't search again`() = runTest(dispatcher) {
+    val gate = CompletableDeferred<Unit>()
+    val source = FakeSource("/tabs").apply {
+      saved = listOf(song("One"))
+      scanGate = gate
+      scanResult = Result.success(ScanResult(saved))
+    }
+    val vm = vm(source)
+    advanceUntilIdle()
+    val before = source.searches.size
+    vm.showMessage("Hello")
+    advanceUntilIdle()
+    vm.messageShown()
+    advanceUntilIdle()
+    vm.rescan()
+    advanceUntilIdle()
+    assertTrue(vm.state.value.scanning)
+    assertEquals("no search for a message or while scanning", before, source.searches.size)
+    gate.complete(Unit)
+    advanceUntilIdle()
   }
 
   @Test

@@ -1,6 +1,8 @@
 package dev.tabsync.tabfinder
 
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -23,6 +25,16 @@ class FilterAndSuggestionTest : DeviceTest() {
   private fun type(field: String, text: String) = compose.onNodeWithTag("field-$field").performTextInput(text)
 
   private fun waitForCounter(want: String) = until(10_000) { counter() == want }
+
+  @Test
+  fun rowsShowWhatTabscanWorkedOut() {
+    start()
+    // Subtitle and tempo come from Go (internal/rows), the same as on the desktop.
+    compose.onNodeWithTag("song-Amber Marsh/Tide of Lanterns/First Frost.gp3")
+      .assert(hasText("Amber Marsh · Tide of Lanterns"))
+      .assert(hasText("120"))
+      .assert(hasText("BPM"))
+  }
 
   // E-AND-04
   @Test

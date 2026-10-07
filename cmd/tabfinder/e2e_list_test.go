@@ -14,7 +14,6 @@ import (
 	"gioui.org/io/key"
 	"gioui.org/io/pointer"
 
-	"tabfinder/internal/finder"
 	"tabfinder/internal/tab"
 	"tabfinder/internal/testlib"
 )
@@ -72,66 +71,9 @@ func TestMenuClicksNeverOpenASong(t *testing.T) {
 	calledWith(t, h.toolDir, "tuxguitar")
 }
 
-// E-DSK-23
-func TestRowContent(t *testing.T) {
+// E-DSK-23 (row content: internal/rows)
+func TestRowsDraw(t *testing.T) {
 	songs := testlib.Songs()
-	lib := finder.New(songs)
-	by := map[string]finder.Entry{}
-	for _, e := range lib.Entries {
-		by[e.Song.Title] = e
-	}
-	for title, want := range map[string]string{
-		"Brass Kettle": "Soilbed Quartet · Glass Orchard",
-		"Eight String": "Merrowgate", // no album: no dot
-		"Nine String":  "Nine",
-		"Broken Song":  "Broken",
-	} {
-		if got := rowSubtitle(by[title].Song); got != want {
-			t.Errorf("%s: subtitle %q, want %q", title, got, want)
-		}
-	}
-	if got := rowSubtitle(&tab.Song{Artist: "  ", Album: "Album"}); got != "Album" {
-		t.Errorf("blank artist: %q", got)
-	}
-	if got := rowSubtitle(&tab.Song{}); got != "" {
-		t.Errorf("nothing: %q", got)
-	}
-	for _, tt := range []struct {
-		bpms      []string
-		main, sub string
-	}{
-		{nil, "", ""},
-		{[]string{"190"}, "190", "BPM"},
-		{[]string{"190", "145"}, "190", "→ 145"},
-		{[]string{"190", "145", "100"}, "190", "→ 145 100"},
-		{[]string{"190", "145", "100", "80"}, "190", "→ 145 100 …"},
-		{[]string{"120.5"}, "120.5", "BPM"},
-	} {
-		if m, s := tempoParts(tt.bpms); m != tt.main || s != tt.sub {
-			t.Errorf("tempoParts(%v) = %q, %q; want %q, %q", tt.bpms, m, s, tt.main, tt.sub)
-		}
-	}
-	if !unreadable(by["Broken Song"]) {
-		t.Error("the unparseable file isn't shown as unreadable")
-	}
-	for _, title := range []string{"Brass Kettle", "Eight String"} {
-		if unreadable(by[title]) {
-			t.Errorf("%s is shown as unreadable", title)
-		}
-	}
-	// An error with something read before it is not "couldn't read".
-	partial := finder.New([]*tab.Song{{Path: "a.gp5", Error: "tempo changes incomplete", Tracks: []tab.Track{testlib.EStd6}}})
-	if unreadable(partial.Entries[0]) {
-		t.Error("a partly read file is shown as unreadable")
-	}
-	// Tuning tags: one per distinct tuning, bigger string counts first.
-	var tags []string
-	for _, tu := range by["Brass Kettle"].Tunings {
-		tags = append(tags, fmt.Sprintf("%d %s", tu.Strings, tu.Label()))
-	}
-	if !slices.Equal(tags, []string{"6 Drop C", "4 Drop C"}) {
-		t.Errorf("tags = %q", tags)
-	}
 	// Every row draws, scrolled through, in a narrow and a wide window.
 	for _, w := range []int{360, 1000, 2000} {
 		h := newHarnessWith(t, harnessOpts{index: indexOf(songs), size: image.Pt(w, 900)})
@@ -183,7 +125,7 @@ func TestOpenSong(t *testing.T) {
 		h.typeInto(&h.u.name, "quartz")
 		h.press(key.NameEscape)
 		h.clickRect(h.rowRect(0))
-		want := filepath.Join(cacheDir, "open", "Quartz.gp") // the file inside is Guitar Pro 7: named after what it really is
+		want := filepath.Join(h.u.dirs.cache, "open", "Quartz.gp") // the file inside is Guitar Pro 7: named after what it really is
 		args := calledWith(t, h.toolDir, "tuxguitar")
 		if !slices.Equal(args, []string{want}) {
 			t.Fatalf("args = %q, want %q", args, want)
@@ -236,12 +178,12 @@ func TestHoverAndLongList(t *testing.T) {
 	r0, r1 := h.rowRect(0), h.rowRect(1)
 	c0, c1 := center(r0), center(r1)
 	h.hoverAt(int(c0.X), int(c0.Y))
-	if !h.u.rows[0].Hovered() || h.u.rows[1].Hovered() {
-		t.Errorf("hover over row 0: %v %v", h.u.rows[0].Hovered(), h.u.rows[1].Hovered())
+	if !h.u.rowClick(0).Hovered() || h.u.rowClick(1).Hovered() {
+		t.Errorf("hover over row 0: %v %v", h.u.rowClick(0).Hovered(), h.u.rowClick(1).Hovered())
 	}
 	h.hoverAt(int(c1.X), int(c1.Y))
-	if h.u.rows[0].Hovered() || !h.u.rows[1].Hovered() {
-		t.Errorf("hover over row 1: %v %v", h.u.rows[0].Hovered(), h.u.rows[1].Hovered())
+	if h.u.rowClick(0).Hovered() || !h.u.rowClick(1).Hovered() {
+		t.Errorf("hover over row 1: %v %v", h.u.rowClick(0).Hovered(), h.u.rowClick(1).Hovered())
 	}
 
 	var songs []*tab.Song
@@ -285,5 +227,25 @@ func TestHoverAndLongList(t *testing.T) {
 	sort.Slice(smallTimes, func(i, j int) bool { return smallTimes[i] < smallTimes[j] })
 	if m := smallTimes[len(smallTimes)/2]; median > 8*m+2*time.Millisecond {
 		t.Errorf("1000 songs: median frame %v vs %v for 20", median, m)
+	}
+}
+
+// A row's click state stays with its song: when filtering moves another song into the first
+// row, that row doesn't take over the first song's hover and press.
+func TestRowStateFollowsTheSong(t *testing.T) {
+	h := libHarness(t)
+	song := func(i int) *tab.Song { return h.u.lib.Entries[h.u.result.Matches[i]].Song }
+	first, second := song(0), song(1)
+	c := h.u.rowClick(0)
+	if c == h.u.rowClick(1) {
+		t.Fatal("two rows share their click state")
+	}
+	h.u.in.Name = second.Title
+	h.frame()
+	if song(0) != second {
+		t.Fatalf("filtering by %q didn't put it first: %s", second.Title, song(0).Path)
+	}
+	if h.u.rowClick(0) == c || h.u.rows[first.Path] != c {
+		t.Error("the first row's click state didn't stay with its song")
 	}
 }

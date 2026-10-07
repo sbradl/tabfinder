@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"path/filepath"
 	"runtime/debug"
-	"strings"
+	"sync"
 	"time"
 
 	"gioui.org/gesture"
@@ -23,6 +22,7 @@ import (
 	"golang.org/x/exp/shiny/materialdesign/icons"
 
 	"tabfinder/internal/finder"
+	"tabfinder/internal/rows"
 	"tabfinder/internal/tab"
 )
 
@@ -41,39 +41,35 @@ func icon(data []byte) *widget.Icon {
 	return ic
 }
 
-// The clock and timer the UI uses, replaced in tests so they needn't sleep.
-var (
-	now       = time.Now
-	afterFunc = time.AfterFunc
-)
+// clock is the time the app goes by, and its timers; tests use their own, so they needn't sleep.
+type clock struct {
+	now       func() time.Time
+	afterFunc func(time.Duration, func()) *time.Timer
+}
 
+var systemClock = clock{time.Now, time.AfterFunc}
+
+// ui is the window's widgets over a session. Each frame first applies the input since the
+// last one (update), then draws (layout), which changes nothing.
 type ui struct {
+	*session
+	dirs   dirs
+	clock  clock
 	redraw func() // asks for a frame, from any goroutine
 	pal    palette
 	th     *material.Theme
-	posts  chan func() // state changes from background work, run on the UI goroutine
+	posts  chan func()    // state changes from background work, run on the UI goroutine
+	opens  sync.WaitGroup // songs being opened in TuxGuitar, which may copy a file first
 
-	root     string
-	lib      *finder.Library
-	loaded   bool // the cached index has been read
-	scanning bool
-	message  string
-	msgUntil time.Time
-
-	in                        finder.Query
 	artist, name, tuning, bpm field
 	list                      widget.List
-	rows                      []gesture.Click
+	rows                      map[string]*gesture.Click // by song path, so a row's hover and press stay with its song
 	folderBtn, rescanBtn, cta widget.Clickable
-
-	// The search for in over lib, redone when either changes.
-	result    finder.Result
-	resultFor *finder.Library
-	resultIn  finder.Query
 }
 
-func newUI(redraw func()) *ui {
-	u := &ui{redraw: redraw, pal: dark, posts: make(chan func(), 16), root: loadRoot(), lib: finder.New(nil)}
+func newUI(redraw func(), d dirs, c clock) *ui {
+	root, rootErr := d.loadRoot()
+	u := &ui{session: newSession(root, c.now), dirs: d, clock: c, redraw: redraw, pal: dark, posts: make(chan func(), 16), rows: map[string]*gesture.Click{}}
 	if d, ok := prefersDark(); ok && !d {
 		u.pal = light
 	}
@@ -87,15 +83,19 @@ func newUI(redraw func()) *ui {
 		f.editor.Submit = true
 	}
 	u.bpm.placeholder = "100-140"
+	if rootErr != nil {
+		u.show("Couldn't read the settings: " + rootErr.Error())
+	}
+	u.artist.set = func(t string) { u.in.Artist = t }
+	u.name.set = func(t string) { u.in.Name = t }
+	u.tuning.set = u.typeTuning
+	u.bpm.set = func(t string) { u.in.BPM = t }
 	go func() {
-		songs, err := finder.LoadIndex(indexFile)
+		songs, err := finder.LoadIndex(u.dirs.index())
 		u.post(func() {
-			u.loaded = true
-			if err != nil {
-				u.show("Couldn't read the saved scan: " + err.Error())
-			}
-			u.setSongs(songs)
-			if len(songs) == 0 && u.root != "" {
+			scan := u.indexLoaded(songs, err)
+			u.freeMemorySoon()
+			if scan {
 				u.rescan()
 			}
 		})
@@ -119,17 +119,12 @@ func (u *ui) drain() {
 	}
 }
 
-func (u *ui) setSongs(songs []*tab.Song) {
-	u.lib = finder.New(songs)
-	// Decoding the index and drawing the new list for the first time (shaping text, caching
-	// glyphs) leave garbage twice the size of what's live; Go would keep it as headroom.
-	// Hand it back to the system once that first drawing is done.
-	afterFunc(2*time.Second, debug.FreeOSMemory)
-}
+// freeMemorySoon is for after new songs: decoding them and drawing the new list for the
+// first time (shaping text, caching glyphs) leave garbage twice the size of what's live; Go
+// would keep it as headroom. Hand it back to the system once that first drawing is done.
+func (u *ui) freeMemorySoon() { u.clock.afterFunc(2*time.Second, debug.FreeOSMemory) }
 
-func (u *ui) show(msg string) {
-	u.message, u.msgUntil = msg, now().Add(4*time.Second)
-}
+func (u *ui) fields() []*field { return []*field{&u.artist, &u.name, &u.tuning, &u.bpm} }
 
 func (u *ui) rescan() {
 	if u.scanning || u.root == "" {
@@ -139,21 +134,10 @@ func (u *ui) rescan() {
 	root := u.root
 	go func() {
 		start := time.Now()
-		songs, err := finder.ScanIndex(root, indexFile)
+		songs, err := finder.ScanIndex(root, u.dirs.index())
 		u.post(func() {
-			u.scanning = false
-			if songs == nil && err != nil {
-				u.show("Scan failed: " + err.Error())
-				return
-			}
-			u.setSongs(songs)
-			unreadable := 0
-			for _, s := range songs {
-				if s.Error != "" {
-					unreadable++
-				}
-			}
-			u.show(fmt.Sprintf("%d tabs, %d unreadable, in %.1f s", len(songs), unreadable, time.Since(start).Seconds()))
+			u.scanDone(songs, err, time.Since(start))
+			u.freeMemorySoon()
 		})
 	}()
 }
@@ -168,10 +152,10 @@ func (u *ui) chooseFolder() {
 				u.show(err.Error())
 			case dir != "":
 				u.root = dir
-				if err := saveRoot(dir); err != nil {
+				if err := u.dirs.saveRoot(dir); err != nil {
 					u.show("Couldn't save the folder: " + err.Error())
 				}
-				dropIndex()
+				u.dirs.dropIndex()
 				u.setSongs(nil)
 				u.rescan()
 			}
@@ -179,22 +163,34 @@ func (u *ui) chooseFolder() {
 	}()
 }
 
-func (u *ui) search() {
-	if u.resultFor != u.lib || u.resultIn != u.in {
-		u.result, u.resultFor, u.resultIn = u.lib.Search(u.in), u.lib, u.in
+// update applies the input since the last frame, which acted on what that frame drew.
+func (u *ui) update(gtx C) {
+	if u.cta.Clicked(gtx) {
+		if p, _ := u.placeholder(); p != nil {
+			p.do()
+		}
 	}
-}
-
-func (u *ui) layout(gtx C) D {
-	u.handleFields(gtx)
+	u.handleRows(gtx)
+	for _, f := range u.fields() {
+		u.handleField(gtx, f)
+	}
 	if u.folderBtn.Clicked(gtx) {
 		u.chooseFolder()
 	}
 	if u.rescanBtn.Clicked(gtx) {
 		u.rescan()
 	}
+	u.expireMessage(gtx.Now)
 	u.search()
+	u.artist.menu, u.tuning.menu = u.artistMenu(), u.tuningMenu()
+	if u.applyEnter() {
+		u.search()
+		u.artist.menu, u.tuning.menu = u.artistMenu(), u.tuningMenu()
+	}
+}
 
+func (u *ui) layout(gtx C) D {
+	u.update(gtx)
 	paint.Fill(gtx.Ops, u.pal.bg)
 	layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(u.topBar),
@@ -204,23 +200,45 @@ func (u *ui) layout(gtx C) D {
 	return D{Size: gtx.Constraints.Max}
 }
 
+// prompt is a message with a button, shown instead of the song list.
+type prompt struct {
+	title, text, action string
+	do                  func()
+}
+
+// placeholder is what shows instead of the song list: a prompt, or a blank space while the
+// songs are on their way. Neither (nil, false) means there's a list to show.
+func (u *ui) placeholder() (p *prompt, blank bool) {
+	none := len(u.result.Matches) == 0
+	switch {
+	case u.root == "":
+		return &prompt{"Choose your tab folder", "Pick the folder that holds your Guitar Pro, TuxGuitar and Power Tab files.", "Choose folder", u.chooseFolder}, false
+	case !u.loaded:
+		return nil, true // reading the saved scan, a moment at most
+	case none && u.scanning:
+		return nil, true
+	case none && u.in.Active():
+		return &prompt{"No tabs match", "Try fewer filters.", "Clear filters", u.clearFilters}, false
+	case none:
+		return &prompt{"No tabs found", "Rescan, or choose another folder.", "Rescan", u.rescan}, false
+	}
+	return nil, false
+}
+
 func (u *ui) content(gtx C) D {
+	p, blank := u.placeholder()
 	if u.root == "" {
-		return u.prompt(gtx, "Choose your tab folder", "Pick the folder that holds your Guitar Pro, TuxGuitar and Power Tab files.", "Choose folder", u.chooseFolder)
+		return u.prompt(gtx, p)
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(u.filters),
 		layout.Rigid(u.progress),
 		layout.Flexed(1, func(gtx C) D {
 			switch {
-			case !u.loaded:
-				return D{Size: gtx.Constraints.Max} // reading the saved scan, a moment at most
-			case len(u.result.Matches) == 0 && u.scanning:
+			case blank:
 				return D{Size: gtx.Constraints.Max}
-			case len(u.result.Matches) == 0 && u.in.Active():
-				return u.prompt(gtx, "No tabs match", "Try fewer filters.", "Clear filters", u.clearFilters)
-			case len(u.result.Matches) == 0:
-				return u.prompt(gtx, "No tabs found", "Rescan, or choose another folder.", "Rescan", u.rescan)
+			case p != nil:
+				return u.prompt(gtx, p)
 			}
 			return u.songList(gtx)
 		}),
@@ -228,10 +246,10 @@ func (u *ui) content(gtx C) D {
 }
 
 func (u *ui) clearFilters() {
-	for _, f := range []*field{&u.artist, &u.name, &u.tuning, &u.bpm} {
+	for _, f := range u.fields() {
 		f.editor.SetText("")
 	}
-	u.in = finder.Query{}
+	u.clearQuery()
 }
 
 // --- top bar and filters ---
@@ -259,15 +277,10 @@ func (u *ui) topBar(gtx C) D {
 }
 
 // subtitle is the line under the title: how many tabs, in which folder.
-func (u *ui) subtitle() string {
-	return strings.ToUpper(fmt.Sprintf("%d tabs in %s", len(u.lib.Entries), filepath.Base(filepath.Clean(u.root))))
-}
+func (u *ui) subtitle() string { return rows.LibraryLine(len(u.lib.Entries), u.root) }
 
-// counter is "matches / total", padded to the total's width so it never changes size.
-func (u *ui) counter() string {
-	total := fmt.Sprint(len(u.lib.Entries))
-	return fmt.Sprintf("%*d / %s", len(total), len(u.result.Matches), total)
-}
+// counter is "matches / total".
+func (u *ui) counter() string { return rows.Counter(len(u.result.Matches), len(u.lib.Entries)) }
 
 func (u *ui) filters(gtx C) D {
 	return u.panel(gtx, layout.Inset{Left: 16, Right: 16, Top: 12, Bottom: 12}, func(gtx C) D {
@@ -276,11 +289,11 @@ func (u *ui) filters(gtx C) D {
 			layout.Rigid(func(gtx C) D {
 				return layout.Flex{}.Layout(gtx,
 					layout.Flexed(1, func(gtx C) D {
-						return u.field(gtx, &u.artist, nil, false, u.artistMenu())
+						return u.field(gtx, &u.artist, nil, false)
 					}),
 					layout.Rigid(gap),
 					layout.Flexed(1.4, func(gtx C) D {
-						return u.field(gtx, &u.name, func(gtx C) D { return u.icon(gtx, icSearch, u.pal.fgMuted) }, false, nil)
+						return u.field(gtx, &u.name, func(gtx C) D { return u.icon(gtx, icSearch, u.pal.fgMuted) }, false)
 					}),
 				)
 			}),
@@ -292,12 +305,12 @@ func (u *ui) filters(gtx C) D {
 						if u.in.Strings != 0 {
 							badge = func(gtx C) D { return u.badge(gtx, u.in.Strings) }
 						}
-						return u.field(gtx, &u.tuning, badge, false, u.tuningMenu())
+						return u.field(gtx, &u.tuning, badge, false)
 					}),
 					layout.Rigid(gap),
 					layout.Rigid(func(gtx C) D {
 						gtx.Constraints.Min.X, gtx.Constraints.Max.X = gtx.Dp(150), gtx.Dp(150)
-						return u.field(gtx, &u.bpm, nil, u.result.BPMInvalid, nil)
+						return u.field(gtx, &u.bpm, nil, u.result.BPMInvalid)
 					}),
 					layout.Rigid(func(gtx C) D {
 						return layout.Inset{Left: 16, Right: 8}.Layout(gtx, func(gtx C) D {
@@ -312,7 +325,7 @@ func (u *ui) filters(gtx C) D {
 
 func (u *ui) artistMenu() *menu {
 	var items []menuItem
-	for _, a := range u.lib.SuggestArtists(u.in.Artist) {
+	for _, a := range u.artistSuggestions() {
 		items = append(items, menuItem{text: a})
 	}
 	return &menu{items: items, pick: func(it menuItem) {
@@ -323,94 +336,169 @@ func (u *ui) artistMenu() *menu {
 
 func (u *ui) tuningMenu() *menu {
 	var items []menuItem
-	for _, t := range finder.SuggestTunings(u.result.Tunings, u.in.Tuning) {
-		detail := t.Notes
-		if t.Label() == t.Notes {
-			detail = "" // a custom tuning, labelled by its notes already
-		}
-		items = append(items, menuItem{text: t.Label(), detail: detail, section: fmt.Sprintf("%d STRINGS", t.Strings), value: t})
+	for _, t := range u.tuningSuggestions() {
+		items = append(items, menuItem{text: t.Label, detail: t.Detail, section: rows.Section(t.Strings), value: t.Tuning})
 	}
 	return &menu{items: items, pick: func(it menuItem) {
 		t := it.value.(finder.Tuning)
 		u.tuning.pick(t.Label())
-		u.in.Tuning, u.in.Strings = t.Label(), t.Strings
+		u.pickTuning(t)
 	}}
 }
 
-// handleFields applies typing, clearing, Enter and Escape before layout.
-func (u *ui) handleFields(gtx C) {
-	for _, f := range []*field{&u.artist, &u.name, &u.tuning, &u.bpm} {
-		// Before the editor, which would take the down arrow to move the caret.
-		for {
-			ev, ok := gtx.Event(key.Filter{Focus: &f.editor, Name: key.NameEscape}, key.Filter{Focus: &f.editor, Name: key.NameDownArrow})
-			if !ok {
-				break
-			}
-			if ev, ok := ev.(key.Event); ok && ev.State == key.Press {
-				f.dismissed = ev.Name == key.NameEscape
-			}
+// handleField applies the typing, clearing, keys and clicks on a field since the last frame,
+// and a pick by pointer from the suggestions that frame showed.
+func (u *ui) handleField(gtx C, f *field) {
+	focused := gtx.Focused(&f.editor)
+	if focused && !f.wasFocused {
+		f.dismissed = false
+	}
+	f.wasFocused = focused
+	// Before the editor, which would take the down arrow to move the caret.
+	for {
+		ev, ok := gtx.Event(key.Filter{Focus: &f.editor, Name: key.NameEscape}, key.Filter{Focus: &f.editor, Name: key.NameDownArrow})
+		if !ok {
+			break
 		}
-		changed := false
-		for {
-			ev, ok := f.editor.Update(gtx)
-			if !ok {
-				break
-			}
-			switch ev.(type) {
-			case widget.ChangeEvent:
-				picked := f.picked
-				f.picked = ""
-				if picked != "" && f.editor.Text() == picked {
-					break
-				}
-				changed = true
-				f.dismissed = false
-			case widget.SubmitEvent:
-				f.submitted = true
-			}
-		}
-		if f.clear.Clicked(gtx) {
-			f.editor.SetText("")
-			changed = true
-			gtx.Execute(key.FocusCmd{Tag: &f.editor})
-		}
-		for {
-			ev, ok := f.reopen.Update(gtx.Source)
-			if !ok {
-				break
-			}
-			if ev.Kind == gesture.KindPress {
-				f.dismissed = false
-			}
-		}
-		if !changed {
-			continue
-		}
-		t := f.editor.Text()
-		switch f {
-		case &u.artist:
-			u.in.Artist = t
-		case &u.name:
-			u.in.Name = t
-		case &u.tuning:
-			u.in.Tuning, u.in.Strings = t, 0 // typing drops the string count a pick set
-		case &u.bpm:
-			u.in.BPM = t
+		if ev, ok := ev.(key.Event); ok && ev.State == key.Press {
+			f.dismissed = ev.Name == key.NameEscape
 		}
 	}
+	changed := false
+	for {
+		ev, ok := f.editor.Update(gtx)
+		if !ok {
+			break
+		}
+		switch ev.(type) {
+		case widget.ChangeEvent:
+			picked := f.picked
+			f.picked = ""
+			if picked != "" && f.editor.Text() == picked {
+				break
+			}
+			changed = true
+			f.dismissed = false
+		case widget.SubmitEvent:
+			f.submitted = true
+		}
+	}
+	// A pick's change event came in above, or the editor's layout took it the frame it was made.
+	f.picked = ""
+	if f.clear.Clicked(gtx) {
+		f.editor.SetText("")
+		changed = true
+		gtx.Execute(key.FocusCmd{Tag: &f.editor})
+	}
+	for {
+		ev, ok := f.reopen.Update(gtx.Source)
+		if !ok {
+			break
+		}
+		if ev.Kind == gesture.KindPress {
+			f.dismissed = false
+		}
+	}
+	if changed {
+		f.set(f.editor.Text())
+	}
+	// The menu's background takes the clicks that would reach the rows below it.
+	for {
+		if _, ok := gtx.Event(pointer.Filter{Target: &f.menuBlock, Kinds: pointer.Press | pointer.Release}); !ok {
+			break
+		}
+	}
+	if f.menu == nil {
+		return
+	}
+	for i := range min(len(f.menu.items), len(f.menuItems)) {
+		for {
+			ev, ok := f.menuItems[i].Update(gtx.Source)
+			if !ok {
+				break
+			}
+			// On press: the editor may lose focus before a release arrives.
+			if ev.Kind == gesture.KindPress {
+				f.menu.pick(f.menu.items[i])
+				f.dismissed = true
+			}
+		}
+	}
+}
+
+// applyEnter picks the first suggestion of a field where Enter was pressed: of what's typed
+// now, so update calls it with the menus up to date. It reports whether anything was picked.
+func (u *ui) applyEnter() bool {
+	picked := false
+	for _, f := range u.fields() {
+		if f.submitted && f.menu != nil && len(f.menu.items) > 0 && !f.dismissed {
+			f.menu.pick(f.menu.items[0])
+			f.dismissed = true
+			picked = true
+		}
+		f.submitted = false
+	}
+	return picked
+}
+
+// handleRows opens the songs whose rows were clicked: rows of the last frame's result, which
+// is for the songs of then (resultFor); new songs may have come in since.
+func (u *ui) handleRows(gtx C) {
+	if u.resultFor == nil {
+		return
+	}
+	for _, m := range u.result.Matches {
+		s := u.resultFor.Entries[m].Song
+		click := u.rows[s.Path]
+		if click == nil {
+			continue // never drawn
+		}
+		for {
+			ev, ok := click.Update(gtx.Source)
+			if !ok {
+				break
+			}
+			if ev.Kind == gesture.KindClick {
+				u.open(s)
+			}
+		}
+	}
+}
+
+// open opens s in TuxGuitar, off the UI goroutine: a misnamed file is copied first.
+func (u *ui) open(s *tab.Song) {
+	root := u.root
+	u.opens.Go(func() {
+		if err := u.dirs.openInTuxGuitar(root, s); err != nil {
+			u.post(func() { u.show(err.Error()) })
+		}
+	})
+}
+
+// rowClick is the click state of the row of the i-th match.
+func (u *ui) rowClick(i int) *gesture.Click {
+	path := u.lib.Entries[u.result.Matches[i]].Song.Path
+	c := u.rows[path]
+	if c == nil {
+		c = new(gesture.Click)
+		u.rows[path] = c
+	}
+	return c
 }
 
 // --- text field with suggestions ---
 
 type field struct {
 	label, placeholder string
+	set                func(text string) // puts what's typed into the query
 	editor             widget.Editor
 	picked             string // text set by picking a suggestion; its change event isn't typing
 	clear              widget.Clickable
-	submitted          bool
+	submitted          bool          // Enter was pressed
 	dismissed          bool          // suggestions closed with Escape or a pick, until reopened
 	reopen             gesture.Click // a click anywhere on the field, which reopens them
 	wasFocused         bool
+	menu               *menu // the suggestions; nil for none
 
 	menuList  widget.List
 	menuItems []gesture.Click
@@ -436,18 +524,9 @@ type menu struct {
 }
 
 // field draws an outlined text field like Material's, with a floating label,
-// a clear button and, if m is set, a suggestion menu while focused.
-func (u *ui) field(gtx C, f *field, leading layout.Widget, isErr bool, m *menu) D {
+// a clear button and, if it has any, its suggestions while focused.
+func (u *ui) field(gtx C, f *field, leading layout.Widget, isErr bool) D {
 	focused := gtx.Focused(&f.editor)
-	if focused && !f.wasFocused {
-		f.dismissed = false
-	}
-	f.wasFocused = focused
-	if m != nil && f.submitted && len(m.items) > 0 && !f.dismissed {
-		m.pick(m.items[0])
-		f.dismissed = true
-	}
-	f.submitted = false
 
 	size := image.Pt(gtx.Constraints.Max.X, gtx.Dp(56))
 	gtx.Constraints = layout.Exact(size)
@@ -524,7 +603,7 @@ func (u *ui) field(gtx C, f *field, leading layout.Widget, isErr bool, m *menu) 
 		off.Pop()
 	}
 
-	if m != nil && focused && !f.dismissed && len(m.items) > 0 {
+	if m := f.menu; m != nil && focused && !f.dismissed && len(m.items) > 0 {
 		rec := op.Record(gtx.Ops)
 		op.Offset(image.Pt(0, size.Y+gtx.Dp(4))).Add(gtx.Ops)
 		u.menu(gtx, f, size.X, m)
@@ -562,19 +641,6 @@ func (u *ui) menu(gtx C, f *field, width int, m *menu) {
 	for len(f.menuItems) < len(m.items) {
 		f.menuItems = append(f.menuItems, gesture.Click{})
 	}
-	for i := range m.items {
-		for {
-			ev, ok := f.menuItems[i].Update(gtx.Source)
-			if !ok {
-				break
-			}
-			// On press: the editor may lose focus before a release arrives.
-			if ev.Kind == gesture.KindPress {
-				m.pick(m.items[i])
-				f.dismissed = true
-			}
-		}
-	}
 
 	r := gtx.Dp(10)
 	// Shadow, surface, outline.
@@ -586,11 +652,6 @@ func (u *ui) menu(gtx C, f *field, width int, m *menu) {
 	paint.FillShape(gtx.Ops, u.pal.raised, shape.Op(gtx.Ops))
 	defer shape.Push(gtx.Ops).Pop()
 	event.Op(gtx.Ops, &f.menuBlock)
-	for {
-		if _, ok := gtx.Event(pointer.Filter{Target: &f.menuBlock, Kinds: pointer.Press | pointer.Release}); !ok {
-			break
-		}
-	}
 
 	gtx.Constraints = layout.Exact(size)
 	f.menuList.Axis = layout.Vertical
@@ -642,28 +703,14 @@ func (u *ui) menu(gtx C, f *field, width int, m *menu) {
 // --- song list ---
 
 func (u *ui) songList(gtx C) D {
-	for len(u.rows) < len(u.result.Matches) {
-		u.rows = append(u.rows, gesture.Click{})
-	}
 	ls := material.List(u.th, &u.list)
 	ls.Indicator.Color, ls.Indicator.HoverColor = u.pal.outline, u.pal.fgMuted
 	return ls.Layout(gtx, len(u.result.Matches), func(gtx C, i int) D {
-		return u.songRow(gtx, &u.rows[i], u.lib.Entries[u.result.Matches[i]])
+		return u.songRow(gtx, u.rowClick(i), u.songRows[u.result.Matches[i]])
 	})
 }
 
-func (u *ui) songRow(gtx C, click *gesture.Click, e finder.Entry) D {
-	for {
-		ev, ok := click.Update(gtx.Source)
-		if !ok {
-			break
-		}
-		if ev.Kind == gesture.KindClick {
-			if err := openInTuxGuitar(u.root, e.Song); err != nil {
-				u.show(err.Error())
-			}
-		}
-	}
+func (u *ui) songRow(gtx C, click *gesture.Click, r rows.Song) D {
 	gtx.Constraints.Min.X = gtx.Constraints.Max.X
 	rec := op.Record(gtx.Ops)
 	dims := layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -675,26 +722,24 @@ func (u *ui) songRow(gtx C, click *gesture.Click, e finder.Entry) D {
 						return layout.Flex{}.Layout(gtx,
 							layout.Flexed(1, func(gtx C) D {
 								return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-									layout.Rigid(func(gtx C) D { return u.text(gtx, titleMedium, u.pal.fg, e.Song.Title) }),
-									layout.Rigid(func(gtx C) D {
-										return u.text(gtx, bodyMedium, u.pal.fgMuted, rowSubtitle(e.Song))
-									}),
+									layout.Rigid(func(gtx C) D { return u.text(gtx, titleMedium, u.pal.fg, r.Title) }),
+									layout.Rigid(func(gtx C) D { return u.text(gtx, bodyMedium, u.pal.fgMuted, r.Subtitle) }),
 								)
 							}),
-							layout.Rigid(func(gtx C) D { return u.tempo(gtx, e.BPMs) }),
+							layout.Rigid(func(gtx C) D { return u.tempo(gtx, r.Tempo, r.TempoDetail) }),
 						)
 					}),
 					layout.Rigid(func(gtx C) D {
 						switch {
-						case len(e.Tunings) > 0:
+						case len(r.Tunings) > 0:
 							return layout.Inset{Top: 10}.Layout(gtx, func(gtx C) D {
-								tags := make([]layout.Widget, len(e.Tunings))
-								for i, t := range e.Tunings {
+								tags := make([]layout.Widget, len(r.Tunings))
+								for i, t := range r.Tunings {
 									tags[i] = func(gtx C) D { return u.tuningTag(gtx, t) }
 								}
 								return flow(gtx, gtx.Dp(6), tags)
 							})
-						case unreadable(e):
+						case r.Unreadable:
 							return layout.Inset{Top: 10}.Layout(gtx, func(gtx C) D {
 								return u.text(gtx, labelSmall, u.pal.err, "Couldn't read this file")
 							})
@@ -717,42 +762,11 @@ func (u *ui) songRow(gtx C, click *gesture.Click, e finder.Entry) D {
 	return dims
 }
 
-// rowSubtitle is "artist · album", leaving out what's missing.
-func rowSubtitle(s *tab.Song) string {
-	var parts []string
-	for _, p := range []string{s.Artist, s.Album} {
-		if strings.TrimSpace(p) != "" {
-			parts = append(parts, p)
-		}
-	}
-	return strings.Join(parts, " · ")
-}
-
-// unreadable: the file couldn't be parsed and there's nothing else to show of it.
-func unreadable(e finder.Entry) bool { return len(e.Tunings) == 0 && e.Song.Error != "" }
-
-// tempoParts is the large opening tempo and the small line under it: "BPM", or the
-// tempo changes that follow (at most two, then an ellipsis).
-func tempoParts(bpms []string) (main, sub string) {
-	if len(bpms) == 0 {
-		return "", ""
-	}
-	sub = "BPM"
-	if len(bpms) > 1 {
-		sub = "→ " + strings.Join(bpms[1:min(len(bpms), 3)], " ")
-		if len(bpms) > 3 {
-			sub += " …"
-		}
-	}
-	return bpms[0], sub
-}
-
 // tempo shows the opening tempo, large, with later tempo changes beneath.
-func (u *ui) tempo(gtx C, bpms []string) D {
-	if len(bpms) == 0 {
+func (u *ui) tempo(gtx C, main, sub string) D {
+	if main == "" {
 		return D{}
 	}
-	main, sub := tempoParts(bpms)
 	return layout.Inset{Left: 12}.Layout(gtx, func(gtx C) D {
 		return layout.Flex{Axis: layout.Vertical, Alignment: layout.End}.Layout(gtx,
 			layout.Rigid(func(gtx C) D { return u.text(gtx, style{monoBold, 20}, u.pal.fg, main) }),
@@ -762,12 +776,12 @@ func (u *ui) tempo(gtx C, bpms []string) D {
 }
 
 // tuningTag draws "[7] Drop A".
-func (u *ui) tuningTag(gtx C, t finder.Tuning) D {
+func (u *ui) tuningTag(gtx C, t rows.Tuning) D {
 	rec := op.Record(gtx.Ops)
 	dims := layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx C) D { return u.badge(gtx, t.Strings) }),
 		layout.Rigid(func(gtx C) D {
-			return layout.Inset{Left: 8, Right: 8}.Layout(gtx, func(gtx C) D { return u.text(gtx, labelLarge, u.pal.fg, t.Label()) })
+			return layout.Inset{Left: 8, Right: 8}.Layout(gtx, func(gtx C) D { return u.text(gtx, labelLarge, u.pal.fg, t.Label) })
 		}),
 	)
 	call := rec.Stop()
@@ -838,19 +852,16 @@ func (u *ui) progress(gtx C) D {
 	return D{Size: image.Pt(w, h)}
 }
 
-func (u *ui) prompt(gtx C, title, text, action string, onClick func()) D {
-	if u.cta.Clicked(gtx) {
-		onClick()
-	}
+func (u *ui) prompt(gtx C, p *prompt) D {
 	return layout.Center.Layout(gtx, func(gtx C) D {
 		gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, gtx.Dp(420))
 		return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle}.Layout(gtx,
-			layout.Rigid(func(gtx C) D { return u.text(gtx, titleLarge, u.pal.fg, title) }),
+			layout.Rigid(func(gtx C) D { return u.text(gtx, titleLarge, u.pal.fg, p.title) }),
 			layout.Rigid(layout.Spacer{Height: 12}.Layout),
-			layout.Rigid(func(gtx C) D { return u.text(gtx, bodyLarge, u.pal.fgMuted, text) }),
+			layout.Rigid(func(gtx C) D { return u.text(gtx, bodyLarge, u.pal.fgMuted, p.text) }),
 			layout.Rigid(layout.Spacer{Height: 20}.Layout),
 			layout.Rigid(func(gtx C) D {
-				b := material.Button(u.th, &u.cta, action)
+				b := material.Button(u.th, &u.cta, p.action)
 				b.Font, b.TextSize = labelLarge.font, labelLarge.size
 				b.Background, b.Color, b.CornerRadius = u.pal.accent, u.pal.onAccent, 20
 				b.Inset = layout.Inset{Left: 24, Right: 24, Top: 10, Bottom: 10}
@@ -862,7 +873,6 @@ func (u *ui) prompt(gtx C, title, text, action string, onClick func()) D {
 
 func (u *ui) snackbar(gtx C) {
 	if u.message == "" || !gtx.Now.Before(u.msgUntil) {
-		u.message = ""
 		return
 	}
 	gtx.Execute(op.InvalidateCmd{At: u.msgUntil})

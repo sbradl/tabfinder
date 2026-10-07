@@ -3,7 +3,6 @@ package finder
 import (
 	"fmt"
 	"slices"
-	"strings"
 	"testing"
 
 	"tabfinder/internal/tab"
@@ -97,23 +96,17 @@ func TestNewEntry(t *testing.T) {
 		}
 	})
 	t.Run("no tracks", func(t *testing.T) {
-		if e := newEntry(&tab.Song{}); len(e.Tunings) != 0 || len(e.BPMs) != 0 {
+		if e := newEntry(&tab.Song{}); len(e.Tunings) != 0 {
 			t.Errorf("entry = %+v", e)
 		}
 	})
-	t.Run("tuning without notes", func(t *testing.T) {
-		e := newEntry(&tab.Song{Tracks: []tab.Track{{Pitches: []int{1, 2, 3, 4}, Tuning: "Custom"}}})
-		if want := (Tuning{4, "Custom", ""}); len(e.Tunings) != 1 || e.Tunings[0] != want {
+	t.Run("custom tuning is labelled by its notes", func(t *testing.T) {
+		e := newEntry(&tab.Song{Tracks: []tab.Track{{Pitches: []int{1, 2, 3, 4}}}})
+		if want := (Tuning{4, "Custom", "C# D Eb E"}); len(e.Tunings) != 1 || e.Tunings[0] != want {
 			t.Errorf("tunings = %v", e.Tunings)
 		}
-		if got := e.Tunings[0].Label(); got != "Custom" {
+		if got := e.Tunings[0].Label(); got != "C# D Eb E" {
 			t.Errorf("label = %q", got)
-		}
-	})
-	t.Run("bpm formatting and duplicates", func(t *testing.T) {
-		e := newEntry(&tab.Song{Tempos: []tab.Tempo{{Bar: 1, BPM: 190}, {Bar: 2, BPM: 120.5}, {Bar: 3, BPM: 190}, {Bar: 4, BPM: 120.5}, {Bar: 5, BPM: 100}, {Bar: 6, BPM: 120.25}}})
-		if want := []string{"190", "120.5", "100", "120.25"}; !slices.Equal(e.BPMs, want) {
-			t.Errorf("bpms = %v, want %v", e.BPMs, want)
 		}
 	})
 }
@@ -181,14 +174,14 @@ func TestArtistsOf(t *testing.T) {
 func TestQueryFilter(t *testing.T) {
 	t.Run("trimmed and passed through", func(t *testing.T) {
 		f, invalid := Query{Name: "  a b ", Artist: " c ", Tuning: " d e ", BPM: " 100 - 140 ", Strings: 7}.Filter()
-		if invalid || f.Name != "a b" || f.Artist != "c" || f.Tuning != "d e" || f.Strings != 7 || !f.BPMSet || f.BPMMin != 100 || f.BPMMax != 140 {
+		if invalid || f.Name != "a b" || f.Artist != "c" || f.Tuning != "d e" || f.Strings != 7 || f.BPM == nil || *f.BPM != (BPMRange{Min: 100, Max: 140}) {
 			t.Errorf("filter = %+v, invalid %v", f, invalid)
 		}
 	})
 	t.Run("blank BPM is no filter", func(t *testing.T) {
 		for _, bpm := range []string{"", " ", "\t "} {
 			f, invalid := Query{BPM: bpm}.Filter()
-			if invalid || f.BPMSet {
+			if invalid || f.BPM != nil {
 				t.Errorf("BPM %q: filter = %+v, invalid %v", bpm, f, invalid)
 			}
 		}
@@ -196,7 +189,7 @@ func TestQueryFilter(t *testing.T) {
 	t.Run("invalid BPM is reported and ignored", func(t *testing.T) {
 		for _, bpm := range []string{"fast", "-", "140-100", "1-2-3"} {
 			f, invalid := Query{BPM: bpm, Name: "x"}.Filter()
-			if !invalid || f.BPMSet || f.Name != "x" {
+			if !invalid || f.BPM != nil || f.Name != "x" {
 				t.Errorf("BPM %q: filter = %+v, invalid %v", bpm, f, invalid)
 			}
 		}
@@ -219,10 +212,10 @@ func TestQueryFilter(t *testing.T) {
 
 func TestSearchTunings(t *testing.T) {
 	// 6-string: Drop C x3, E Std x3, Custom x1; 7: B Std x2; 8: custom x1; 9: custom x1; 4: Drop C x2, E std x1; 5: B Std x1.
-	nine := tab.Track{Pitches: []int{25, 30, 35, 40, 45, 50, 55, 59, 64}, Tuning: "Custom (C# F# B E A D G B E)"}
-	eight := tab.Track{Pitches: []int{30, 35, 40, 45, 50, 55, 59, 64}, Tuning: "Custom (F# B E A D G B E)"}
-	bass5 := tab.Track{Pitches: []int{23, 28, 33, 38, 43}, Tuning: "B Standard (B E A D G)"}
-	eStd4 := tab.Track{Pitches: []int{28, 33, 38, 43}, Tuning: "E Standard (E A D G)"}
+	nine := tab.Track{Pitches: []int{25, 30, 35, 40, 45, 50, 55, 59, 64}}
+	eight := tab.Track{Pitches: []int{30, 35, 40, 45, 50, 55, 59, 64}}
+	bass5 := tab.Track{Pitches: []int{23, 28, 33, 38, 43}}
+	eStd4 := tab.Track{Pitches: []int{28, 33, 38, 43}}
 	in := []*tab.Song{
 		{Artist: "A", Title: "1", Tracks: []tab.Track{dropC6, dropC4}},
 		{Artist: "A", Title: "2", Tracks: []tab.Track{dropC6, dropC4}},
@@ -372,47 +365,4 @@ func TestSuggestTunings(t *testing.T) {
 			t.Errorf("len %d, first %v", len(got), got[0])
 		}
 	})
-}
-
-func TestTuxGuitarNameMore(t *testing.T) {
-	for _, tt := range []struct {
-		name    string
-		song    tab.Song
-		want    string
-		inPlace bool
-	}{
-		{"gp3", tab.Song{Path: "a/x.gp3", Format: "gp3", Title: "T"}, "T.gp3", true},
-		{"gp4", tab.Song{Path: "a/x.gp4", Format: "gp4", Title: "T"}, "T.gp4", true},
-		{"gp5", tab.Song{Path: "a/x.gp5", Format: "gp5", Title: "T"}, "T.gp5", true},
-		{"gp6 is gpx", tab.Song{Path: "a/x.gpx", Format: "gp6", Title: "T"}, "T.gpx", true},
-		{"gp7 is gp", tab.Song{Path: "a/x.gp", Format: "gp7", Title: "T"}, "T.gp", true},
-		{"tg", tab.Song{Path: "a/x.tg", Format: "tg", Title: "T"}, "T.tg", true},
-		{"ptb", tab.Song{Path: "a/x.ptb", Format: "ptb", Title: "T"}, "T.ptb", true},
-		{"gp5 named gp3", tab.Song{Path: "a/x.gp3", Format: "gp5", Title: "T"}, "T.gp5", false},
-		{"gp6 named gpx.crdownload", tab.Song{Path: "a/x.gpx.crdownload", Format: "gp6", Title: "T"}, "T.gpx", false},
-		{"gp7 named gp.zip", tab.Song{Path: "a/x.gp.zip", Format: "gp7", Title: "T"}, "T.gp", false},
-		{"upper case extension", tab.Song{Path: "a/x.GP5", Format: "gp5", Title: "T"}, "T.gp5", true},
-		{"mixed case extension", tab.Song{Path: "a/x.Gpx", Format: "gp6", Title: "T"}, "T.gpx", true},
-		{"unknown format uses the path's extension, lower-cased", tab.Song{Path: "a/x.GP5", Title: "T"}, "T.gp5", true},
-		{"unknown format, no extension", tab.Song{Path: "a/x", Title: "T"}, "T.", false},
-		{"dots in title", tab.Song{Path: "a/x.gp5", Format: "gp5", Title: "Mr. A.B. C"}, "Mr AB C.gp5", true},
-		{"slashes in title", tab.Song{Path: "a/x.gp5", Format: "gp5", Title: "QR/ST"}, "QRST.gp5", true},
-		{"emoji dropped", tab.Song{Path: "a/x.gp5", Format: "gp5", Title: "Fire 🔥 Song"}, "Fire  Song.gp5", true},
-		{"only symbols", tab.Song{Path: "a/x.gp5", Format: "gp5", Title: "?!*"}, "song.gp5", true},
-		{"only emoji", tab.Song{Path: "a/x.gp5", Format: "gp5", Title: "🔥"}, "song.gp5", true},
-		{"empty title", tab.Song{Path: "a/x.gp5", Format: "gp5"}, "song.gp5", true},
-		{"umlauts and underscores kept", tab.Song{Path: "a/x.gp5", Format: "gp5", Title: "Ruf_nach Sonne Äther-ß"}, "Ruf_nach Sonne Äther-ß.gp5", true},
-		{"spaces trimmed", tab.Song{Path: "a/x.gp5", Format: "gp5", Title: "  T  "}, "T.gp5", true},
-		{"crdownload in place only if the format says so", tab.Song{Path: "a/x.crdownload", Format: "", Title: "T"}, "T.crdownload", true},
-	} {
-		if got := TuxGuitarName(&tt.song); got != tt.want {
-			t.Errorf("%s: TuxGuitarName = %q, want %q", tt.name, got, tt.want)
-		}
-		if got := OpensInPlace(&tt.song); got != tt.inPlace {
-			t.Errorf("%s: OpensInPlace = %v, want %v", tt.name, got, tt.inPlace)
-		}
-	}
-	if !strings.HasSuffix(TuxGuitarName(&tab.Song{Title: "x", Format: "gp7"}), ".gp") {
-		t.Error("gp7 name does not end in .gp")
-	}
 }

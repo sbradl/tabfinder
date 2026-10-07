@@ -9,22 +9,27 @@ instead of changing the test to match.
 
 | Part | Path | Language | What it does |
 |---|---|---|---|
-| Tab parsing | `internal/tab` | Go | Reads Guitar Pro 3–7, TuxGuitar and Power Tab files; tunings, tempos, artist/album/title with path fallbacks; `Filter`; parallel `ScanAll` |
-| Search | `internal/finder` | Go | Song list, query → matches, artist/tuning suggestions, index file, TuxGuitar file naming |
+| Tab parsing | `internal/tab` | Go | Reads Guitar Pro 3–7, TuxGuitar and Power Tab files; `Tuning`, tempos, artist/album/title with path fallbacks; parallel `Walk`/`ScanAll` |
+| Search | `internal/finder` | Go | Song list, `Filter` and query → matches, artist/tuning suggestions, index file |
+| Rows | `internal/rows` | Go | What the apps show of each song (subtitle, tunings, tempo, unreadable, file name for TuxGuitar) and the texts around the list |
+| TuxGuitar naming | `internal/tuxguitar` | Go | The file name TuxGuitar can open a tab under; whether the original opens in place |
 | CLI | `cmd/tabscan` | Go | TSV/JSON output with filters; `-serve` JSON-lines protocol for the Android app |
 | Reorganizer | `cmd/tabreorg` | Go | Moves tabs into `<Artist>/<Album>/<Song>.<ext>`; dry run, apply, move log, undo script, Markdown summary |
-| Desktop app | `cmd/tabfinder` | Go, Gio | UI over `internal/finder`; config, cache, folder dialog, opens TuxGuitar |
+| Desktop app | `cmd/tabfinder` | Go, Gio | `session` (state, no Gio) and `ui` (input, then drawing) over `internal/finder` and `internal/rows`; config, cache, folder dialog, opens TuxGuitar |
 | Android app | `android/app` | Kotlin, Compose | UI; `Finder.kt` talks to the bundled `tabscan -serve` |
 
 ## Existing tests (extend, don't duplicate)
 
-- `internal/tab/names_test.go`: `tuningName`, `titleFromFilename`, `TempoSummary`
-- `internal/tab/filter_test.go`: `ParseBPMRange`, `Filter.Matches` incl. string count
-- `internal/finder/finder_test.go`: entry order/tunings/BPMs, artists, `Search`, `SuggestTunings`, `TuxGuitarName`/`OpensInPlace`
+- `internal/tab/names_test.go`, `tuning_test.go`: `TuningOf`, `titleFromFilename`, `BareName`, `TitleCase`, `TempoSummary`, track JSON
+- `internal/finder/filter_test.go`: `ParseBPMRange`, `Filter.Matches` incl. string count
+- `internal/finder/finder_test.go`: entry order/tunings, artists, `Search`, `SuggestTunings`
+- `internal/rows/rows_test.go`: row texts, tempo, counter, library line, scan summary
+- `internal/tuxguitar/tuxguitar_test.go`: `FileName`/`OpensInPlace`
 - `cmd/tabscan/serve_test.go`: load, search, empty lists as `[]`, unknown op
 - `cmd/tabreorg/names_test.go`: `ratio` vs Python difflib, `cleanAlbum`, `nicest`, `songName`, `tabExt`
 - `cmd/tabfinder/ui_test.go`: offscreen UI harness (clicks, typing, keys, screenshots); `TestInputs`, `TestReopenSuggestions`
-- Android: none.
+- `cmd/tabfinder/session_test.go`: the desktop app's state without a window
+- Android: JVM tests in `android/app/src/test` (`Finder` over the host tabscan, `MainViewModel` over a fake), device tests in `android/app/src/androidTest`.
 
 ## How to run
 
@@ -34,7 +39,7 @@ instead of changing the test to match.
 - Android JVM tests: `android/gradlew -p android testDebugUnitTest`.
 - Android device tests: `android/gradlew -p android connectedDebugAndroidTest`
   (tablet `HVA1QC60`, Android 10, or an emulator with API 29 and one with API 34).
-- Add Android unit tests to `mise run test` once they exist. Device tests stay a
+- `mise run test` runs the Go tests and the Android JVM tests. Device tests are a
   separate task (`mise run test-device`), since they need hardware.
 
 ## Conventions
@@ -42,7 +47,7 @@ instead of changing the test to match.
 - Test data is made up: artists, albums, songs, tab authors and e-mail addresses are invented
   (no real bands, titles or people), since real tabs are copyrighted. The same goes for the repo
   as a whole: nothing of the author's own library is in it. What `tabreorg` knows about that
-  (folders to skip, album spelling fixes, junk album names) is read from
+  (folders to skip, album spelling fixes, junk album and artist names, notes its file names end in) is read from
   `~/.config/tabreorg/config.json` (see `cmd/tabreorg/config.go`); the tests use a made-up
   `testConfig` (`cmd/tabreorg/config_test.go`) and point the built command at it through
   `XDG_CONFIG_HOME`, so they never read the real file.
@@ -50,7 +55,7 @@ instead of changing the test to match.
   for CLI output and summaries, with an `-update` flag to rewrite them.
 - Never touch the real `~/.config/tabfinder`, `~/.cache/tabfinder`, `~/Guitar/Tabs`
   or `/sdcard/Tabs`. Point every path at temp dirs (`XDG_CONFIG_HOME`,
-  `XDG_CACHE_HOME`, the package vars `configDir`/`cacheDir`/`indexFile` in
+  `XDG_CACHE_HOME`, the `dirs` the desktop app is given: `isolate(t)` in
   `cmd/tabfinder`).
 - External programs (`tuxguitar`, `kdialog`, `zenity`, `gsettings`, `xrdb`) are
   faked with shell scripts in a temp dir prepended to `PATH`. A fake records its
@@ -163,11 +168,11 @@ Make these first, each in its own commit, with existing behavior unchanged.
   return to an earlier tempo kept in the list but shown once in the summary,
   fractional BPM (`120.5`).
 - [x] U-TAB-14 `Filter.Matches`, beyond existing cases: name words in any order
-  across title + file name; case-insensitive; artist substring (not trimmed in
-  `tab.Filter`); tuning by name and by notes, enharmonics per word
+  across title + file name (not its extension); case-insensitive; artist substring (not trimmed in
+  `finder.Filter`); tuning by name and by notes, enharmonics per word
   ("Drop Db" = "drop c#"); "standard" alone = "E Standard"; `Strings` without
   tuning; tuning and strings must match the **same** track; drums ignored;
-  songs without tracks/tempos; `BPMSet` boundaries inclusive; `Active()`.
+  songs without tracks/tempos; `BPM` range boundaries inclusive; `Active()`.
 - [x] U-TAB-15 `ParseBPMRange`: whitespace around numbers, `" 100 - 140 "`,
   decimals, `"-"`, `"--5"`, `"100-"`, `"-0"`, negative ("-5" means at most 5),
   min > max → error.
@@ -207,7 +212,7 @@ Make these first, each in its own commit, with existing behavior unchanged.
   failure, old index kept); creates the parent dir; root unreadable with no
   songs → error and no file written; partial scan → songs, file and error.
   `LoadIndex(ScanIndex(...))` round-trips equal songs.
-- [x] U-FIN-11 `TuxGuitarName`/`OpensInPlace`: every format mapping (gp3, gp4,
+- [x] U-FIN-11 `tuxguitar.FileName`/`OpensInPlace`: every format mapping (gp3, gp4,
   gp5, gp6→gpx, gp7→gp, tg, ptb); empty format → path's extension lowercased;
   title with dots, slashes, emoji, only symbols → "song"; extension check
   case-insensitive (`.GP5`); `.gpx.crdownload` not in place.
@@ -221,12 +226,12 @@ Make these first, each in its own commit, with existing behavior unchanged.
   `scan` of an empty dir; `scan` with an unreadable subdir → songs plus
   `warning`; `search` before any `load` → empty results, not an error;
   malformed JSON line → `{"error":…}` and the session continues; unknown op;
-  empty line; very long line (up to 1 MB); matches index the latest `load`/`scan`.
+  empty line; very long line (up to 1 MB); matches are paths in the latest `load`/`scan`.
 - [x] U-SRV-02 Every list in every response is `[]`, never `null` (`songs`,
   `matches`, `artists`, `tunings`, a song's `tunings`/`bpms`). Check with a JSON
   scan for `null`.
-- [x] U-SRV-03 `songOut`: `unreadable` only when the file had an error **and**
-  no tunings; `openAs` = `finder.TuxGuitarName`; `tuningOut.detail` empty when
+- [x] U-SRV-03 `rows.Song`: `unreadable` only when the file had an error **and**
+  no tunings; `openAs` = `tuxguitar.FileName`; `rows.Tuning.detail` empty when
   label == notes (custom), else the notes.
 - [x] U-SRV-04 Fuzz `serve` with random lines: no panic, one output line per
   input line.
@@ -234,10 +239,10 @@ Make these first, each in its own commit, with existing behavior unchanged.
 ### `cmd/tabreorg`
 
 - [x] U-REO-01 `key`, `cleanAlbum`, `similar`, `nicest`, `filenameKey`,
-  `songKey`, `songName`, `titleCase`, `tabExt` (extend existing tests): year
+  `songKey`, `songName`, `tabExt` (extend existing tests): year
   prefixes/parentheses, articles ("The", "Die"), tuning suffixes in file names
   (`_drop_c`, `7string`, `withbass`…), version tags, junk album names
-  (`single`, `s/t`, `unknown`, `(…)`), `albumAliases`.
+  (`single`, `s/t`, `unknown`, `(…)`), `albumAliases`, `junkArtists`, `fileSuffixes`.
 - [x] U-REO-02 `planner.plan`, one case per rule in its doc comment: files in
   `<Artist>/<Album>/` keep their folder; loose files in an artist folder go to
   the album named in the file, matched loosely against existing album folders,
@@ -257,17 +262,16 @@ Make these first, each in its own commit, with existing behavior unchanged.
 ### `cmd/tabfinder` (desktop, non-UI)
 
 - [x] U-DSK-01 `xdgDir`: env set/unset.
-- [x] U-DSK-02 `loadRoot`/`saveRoot`: no config → legacy, else ""; config.json
-  round-trip; corrupt config.json → "" (no crash); directory created with 0755.
-- [x] U-DSK-03 `legacyRoot`/`unescapeProperty`: `root=` line among others;
-  escapes `\:` `\=` `\\` `ä`; no root line → ""; file missing → "".
+- [x] U-DSK-02 `loadRoot`/`saveRoot`: no config → ""; config.json
+  round-trip; corrupt config.json → "" and an error naming the file; directory created with 0755.
+- U-DSK-03 *(dropped with the earlier app's `settings.properties`)*
 - [x] U-DSK-04 `pickFolder` with fake dialogs on `PATH`: kdialog present → its
-  output trimmed; kdialog exits non-zero (cancel) → `"", nil`; only zenity →
+  output trimmed; kdialog exits 1 (cancel) → `"", nil`, other failures → error with stderr; only zenity →
   zenity used with `--directory`; neither → error mentioning both; empty start →
   home dir passed.
 - [x] U-DSK-05 `openInTuxGuitar` with fake `tuxguitar`: in place for correctly
   named files (original path passed); copy under
-  `cacheDir/open/<TuxGuitarName>` for misnamed ones, overwriting an older copy;
+  `<cache>/open/<tuxguitar.FileName>` for misnamed ones, overwriting an older copy;
   source missing → error; `tuxguitar` missing → "TuxGuitar is not installed";
   the process is reaped (no zombie after `Wait`).
 - [x] U-DSK-06 `prefersDark` with fake `gsettings`: `'prefer-dark'` → dark;
@@ -362,7 +366,7 @@ is drawn above the list).
   shows the list and "N tabs, M unreadable, in X s".
 - [x] E-DSK-02 Cancel the folder dialog → nothing changes.
 - [x] E-DSK-03 No dialog program → message "install kdialog or zenity…".
-- [x] E-DSK-04 Legacy `settings.properties` only → that folder is used on start.
+- E-DSK-04 *(dropped with the earlier app's `settings.properties`)*; a corrupt `config.json` is reported on start.
 - [x] E-DSK-05 Cached index present → list shown without scanning;
   title shows "N TABS IN <FOLDER>".
 - [x] E-DSK-06 Folder set but no index → automatic scan with progress bar;
@@ -407,7 +411,7 @@ is drawn above the list).
   tuning tags with badge colors by range, tempo "190" with "BPM" or
   "→ 145 158 …" (at most two more), unreadable → "Couldn't read this file".
 - [x] E-DSK-24 Click a correctly named song → fake tuxguitar got the original
-  path; misnamed song → got the copy in `cacheDir/open`.
+  path; misnamed song → got the copy in `<cache>/open`.
 - [x] E-DSK-25 tuxguitar missing → snackbar "TuxGuitar is not installed",
   disappears after 4 s (injected clock, R4).
 - [x] E-DSK-26 Hover highlights a row; scrolling a 1000-song list renders only
@@ -466,13 +470,13 @@ for TuxGuitar.
 Implemented in this round: everything except E-AND-12 (performance on the tablet). Shared helpers: `internal/tabfiles` (synthetic tab file builders),
 `internal/testlib` (fixture library, fixture tree, golden files with `-update`).
 Refactors done: R1 (`Finder(binary, dataDir, RootStore)`), R2 (`TabSource`), R3 (test tags), R4
-(`now`/`afterFunc` in `cmd/tabfinder`); plus small ones for testability: `ui.subtitle/counter/rowSubtitle/tempoParts`
+(the desktop app's `clock`, now passed in); plus small ones for testability: `ui.subtitle/counter` (texts now in `internal/rows`)
 and the pure `Finder.treeToPath(authority, documentId, primary)`. Debug builds got
 `applicationIdSuffix = ".debug"` so device tests never touch the real app's folder and scan.
 
 Bugs the tests found, all fixed (the tests were not changed to match):
 
-1. `ParseBPMRange` accepted `NaN` (`internal/tab/filter.go`).
+1. `ParseBPMRange` accepted `NaN` (now `internal/finder/filter.go`).
 2. `titleFromFilename` cut the artist prefix at offsets from a lower-cased copy, wrong for invalid UTF-8 ("Weniger" became "Hr", or a panic). Now `cutPrefixFold` matches on the original string.
 3. Android `Finder`: a tabscan that had died before the next call was restarted without replaying `load`, so `search` found no songs. Now `exchange` replays it.
 4. Android `Song`: `tunings`/`bpms` had no default, so `coerceInputValues` couldn't read a null as empty. Defaults added.

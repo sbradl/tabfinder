@@ -16,77 +16,6 @@ import (
 // StdGuitar is standard tuning, highest string first, as Guitar Pro stores it.
 var StdGuitar = []int{64, 59, 55, 50, 45, 40}
 
-type GP3Track struct {
-	Name    string
-	Strings []int // MIDI notes, highest string first (as stored in the file)
-	Drums   bool
-}
-
-type GP3Spec struct {
-	Title, Artist, Album string
-	Tempo                int
-	Tracks               []GP3Track
-}
-
-// GP3 builds a Guitar Pro 3 file with a header and tracks but no bars.
-func GP3(sp GP3Spec) []byte {
-	var b bytes.Buffer
-	i32 := func(v int) { binary.Write(&b, binary.LittleEndian, int32(v)) }
-	byteSize := func(s string, size int) {
-		b.WriteByte(byte(len(s)))
-		f := make([]byte, size)
-		copy(f, s)
-		b.Write(f)
-	}
-	intByteSize := func(s string) {
-		i32(len(s) + 1)
-		byteSize(s, len(s))
-	}
-	byteSize("FICHIER GUITAR PRO v3.00", 30)
-	intByteSize(sp.Title)
-	intByteSize("") // subtitle
-	intByteSize(sp.Artist)
-	intByteSize(sp.Album)
-	intByteSize("") // words
-	intByteSize("") // copyright
-	intByteSize("") // tab author
-	intByteSize("") // instructions
-	i32(0)          // notice lines
-	b.WriteByte(0)  // triplet feel
-	i32(sp.Tempo)
-	i32(0) // key
-	for range 64 {
-		i32(0) // program
-		b.Write(make([]byte, 8))
-	}
-	i32(0) // measures
-	i32(len(sp.Tracks))
-	for _, t := range sp.Tracks {
-		flags := 0
-		channel := 1
-		if t.Drums {
-			flags, channel = 1, 10
-		}
-		b.WriteByte(byte(flags))
-		byteSize(t.Name, 40)
-		i32(len(t.Strings))
-		for i := range 7 {
-			if i < len(t.Strings) {
-				i32(t.Strings[i])
-			} else {
-				i32(0)
-			}
-		}
-		i32(1) // port
-		i32(channel)
-		i32(0)
-		i32(0)
-		i32(0)
-		i32(0)
-	}
-	return b.Bytes()
-}
-
 // TuxGuitarMagic starts every TuxGuitar 1 file.
 const TuxGuitarMagic = "TuxGuitar File Format"
 
@@ -165,7 +94,7 @@ func GPIF(title, artist, album string, tempos [][2]float64, tracks ...GPIFTrack)
 	return []byte(b.String())
 }
 
-// GPX wraps a score.gpif as a Guitar Pro 7 file (a zip).
+// GP7 wraps a score.gpif as a Guitar Pro 7 file (a zip).
 func GP7(gpif []byte) []byte { return Zip(map[string][]byte{"Content/score.gpif": gpif}) }
 
 type TG2Track struct {

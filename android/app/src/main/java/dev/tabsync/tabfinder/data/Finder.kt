@@ -8,16 +8,20 @@ import androidx.core.content.edit
 import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-// The JSON of `tabscan -serve` (cmd/tabscan/serve.go). All search logic lives there, in Go,
-// shared with the desktop app; these are just its answers.
+// The JSON of `tabscan -serve` (cmd/tabscan/serve.go). The search and what the list shows of
+// each song (internal/rows) live there, in Go, shared with the desktop app; these are its answers.
 
 /** A tuning as shown: "Drop C" on a 6-string; [detail] is its notes unless the label is the notes. */
 @Serializable data class Tuning(val strings: Int, val name: String, val notes: String, val label: String, val detail: String = "")
@@ -32,6 +36,9 @@ data class Song(
   val bpms: List<String> = emptyList(), // distinct tempos in order, the opening one first
   val unreadable: Boolean,
   val openAs: String, // the file name to hand TuxGuitar a copy under
+  val subtitle: String = "", // "artist · album", leaving out what's missing
+  val tempo: String = "", // the opening tempo, shown large; empty for none
+  val tempoDetail: String = "", // under it: "BPM", or the tempo changes that follow
 )
 
 /** The filter fields as typed. [strings] is set by picking a tuning suggestion. */
@@ -43,16 +50,33 @@ data class Query(val name: String = "", val artist: String = "", val tuning: Str
 
 @Serializable
 data class SearchResult(
-  val matches: List<Int> = emptyList(), // indices into the songs
+  val matches: List<String> = emptyList(), // paths of the matching songs, in list order
   val bpmInvalid: Boolean = false,
   val artists: List<String> = emptyList(), // suggestions for the artist field
   val tunings: List<Tuning> = emptyList(), // suggestions for the tuning field, grouped by string count
 )
 
 @Serializable
-data class ScanResult(val songs: List<Song> = emptyList(), val unreadable: Int = 0, val warning: String? = null)
+data class ScanResult(val songs: List<Song> = emptyList(), val unreadable: Int = 0, val summary: String = "", val warning: String? = null)
 
-@Serializable private data class Request(val op: String, val index: String? = null, val root: String? = null, val query: Query? = null)
+@Serializable
+private enum class Op {
+  @SerialName("load") LOAD,
+  @SerialName("scan") SCAN,
+  @SerialName("search") SEARCH,
+}
+
+@Serializable private data class Request(val op: Op, val index: String? = null, val root: String? = null, val query: Query? = null)
+
+/** How long tabscan may take to answer each kind of request before it's stopped. */
+data class Timeouts(val searchMs: Long = 10_000, val loadMs: Long = 60_000, val scanMs: Long = 10 * 60_000)
+
+private fun Timeouts.of(op: Op) =
+  when (op) {
+    Op.SEARCH -> searchMs
+    Op.LOAD -> loadMs
+    Op.SCAN -> scanMs
+  }
 
 @Serializable private data class Response(val error: String? = null)
 
@@ -80,9 +104,9 @@ interface TabSource {
  *
  * [binary] is the tabscan to run, [dataDir] holds the saved scan (index.jsonl) and tabscan's log, and
  * [store] remembers the folder. On a device these come from the [Context] (see the second constructor); tests
- * pass the host build of tabscan and temp files.
+ * pass the host build of tabscan and temp files. A tabscan that doesn't answer within [timeouts] is stopped.
  */
-class Finder(private val binary: File, dataDir: File, private val store: RootStore) : TabSource {
+class Finder(private val binary: File, dataDir: File, private val store: RootStore, private val timeouts: Timeouts = Timeouts()) : TabSource {
   /** Android only lets apps execute files from nativeLibraryDir, hence the lib*.so name (built by `mise run bin`). */
   constructor(context: Context) : this(File(context.applicationInfo.nativeLibraryDir, "libtabscan.so"), context.filesDir, SharedPrefsRootStore(context))
 
@@ -102,20 +126,22 @@ class Finder(private val binary: File, dataDir: File, private val store: RootSto
       index.delete()
     }
 
-  override suspend fun load(): List<Song> = call(Request("load", index = index.path), ScanResult.serializer()).songs
+  override suspend fun load(): List<Song> = call(Request(Op.LOAD, index = index.path), ScanResult.serializer()).songs
 
-  override suspend fun scan(): ScanResult = call(Request("scan", index = index.path, root = checkNotNull(root) { "No tab folder chosen" }), ScanResult.serializer())
+  override suspend fun scan(): ScanResult = call(Request(Op.SCAN, index = index.path, root = checkNotNull(root) { "No tab folder chosen" }), ScanResult.serializer())
 
-  override suspend fun search(query: Query): SearchResult = call(Request("search", query = query), SearchResult.serializer())
+  override suspend fun search(query: Query): SearchResult = call(Request(Op.SEARCH, query = query), SearchResult.serializer())
 
   private suspend fun <T> call(req: Request, answer: KSerializer<T>): T =
     withContext(Dispatchers.IO) {
       lock.withLock {
         val line = json.encodeToString(Request.serializer(), req)
         val reply = runCatching { exchange(req.op, line) }.getOrElse {
-          // tabscan died mid-call: start it again and retry once.
           proc?.destroy()
           proc = null
+          // tabscan died or hung mid-call: start it again and retry a load or search once. Not a scan:
+          // it's slow, and likely what stopped tabscan.
+          if (req.op == Op.SCAN) throw it
           exchange(req.op, line)
         }
         json.decodeFromString(Response.serializer(), reply).error?.let { error(it) }
@@ -124,7 +150,7 @@ class Finder(private val binary: File, dataDir: File, private val store: RootSto
     }
 
   /** Sends [line] (a request of kind [op]) to tabscan, starting it first if needed. */
-  private fun exchange(op: String, line: String): String {
+  private fun exchange(op: Op, line: String): String {
     if (proc?.isAlive != true) {
       val restarted = started
       proc = ProcessBuilder(binary.path, "-serve").redirectError(log).start().also {
@@ -133,19 +159,40 @@ class Finder(private val binary: File, dataDir: File, private val store: RootSto
       }
       started = true
       // A new process has no songs: give it the saved ones before a search, which relies on them.
-      if (restarted && op == "search") roundTrip(json.encodeToString(Request.serializer(), Request("load", index = index.path)))
+      if (restarted && op == Op.SEARCH) roundTrip(Op.LOAD, json.encodeToString(Request.serializer(), Request(Op.LOAD, index = index.path)))
     }
-    return roundTrip(line)
+    return roundTrip(op, line)
   }
 
-  private fun roundTrip(line: String): String {
+  /** Sends [line] and reads the answer, stopping tabscan if it takes longer than [op] may. */
+  private fun roundTrip(op: Op, line: String): String {
+    val p = checkNotNull(proc)
     toGo.write(line)
     toGo.newLine()
     toGo.flush()
-    return fromGo.readLine() ?: error("tabscan stopped: " + (log.readLines().lastOrNull() ?: "no output"))
+    val timedOut = AtomicBoolean()
+    val watchdog =
+      watchdogs.schedule(
+        {
+          timedOut.set(true)
+          p.destroyForcibly()
+        },
+        timeouts.of(op),
+        TimeUnit.MILLISECONDS,
+      )
+    try {
+      val reply = fromGo.readLine()
+      if (timedOut.get()) error("tabscan didn't answer within ${timeouts.of(op) / 1000.0} s")
+      return reply ?: error("tabscan stopped: " + (log.readLines().lastOrNull() ?: "no output"))
+    } finally {
+      watchdog.cancel(false)
+    }
   }
 
   companion object {
+    /** Stops tabscans that take too long to answer; one daemon thread for all Finders. */
+    private val watchdogs = Executors.newSingleThreadScheduledExecutor { Thread(it, "tabscan-watchdog").apply { isDaemon = true } }
+
     private const val EXTERNAL_STORAGE = "com.android.externalstorage.documents"
 
     internal val json = Json {

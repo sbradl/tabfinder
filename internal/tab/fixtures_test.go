@@ -28,13 +28,13 @@ const (
 
 // want is what a fixture must parse to. Empty ErrorContains means no error.
 type want struct {
-	Format        string  `json:"format"`
+	Format        Format  `json:"format"`
 	Title         string  `json:"title"`
 	Artist        string  `json:"artist"`
 	Album         string  `json:"album"`
-	TitleSource   string  `json:"titleSource"`
-	ArtistSource  string  `json:"artistSource"`
-	AlbumSource   string  `json:"albumSource"`
+	TitleSource   Source  `json:"titleSource"`
+	ArtistSource  Source  `json:"artistSource"`
+	AlbumSource   Source  `json:"albumSource"`
 	Tracks        []Track `json:"tracks,omitempty"`
 	Tempos        []Tempo `json:"tempos,omitempty"`
 	ErrorContains string  `json:"errorContains,omitempty"`
@@ -90,9 +90,9 @@ func fixtures() []fixture {
 	})
 	f3Tempos := []Tempo{{1, 140}, {3, 70}, {5, 140}, {8, 155}, {11, 140}, {41, 90}}
 	f3Tracks := []Track{
-		{Name: "Rhythm 7", Instrument: "Distortion Guitar", Pitches: []int{35, 40, 45, 50, 55, 59, 64}, Tuning: "B Standard (B E A D G B E)"},
-		{Name: "Lead", Instrument: "Overdriven Guitar", Pitches: []int{36, 43, 48, 53, 57, 62}, Tuning: "Drop C (C G C F A D)"},
-		{Name: "Pad", Instrument: "Acoustic Guitar (steel)", Pitches: []int{40, 45, 50, 55, 59, 64}, Tuning: "E Standard (E A D G B E)"},
+		{Name: "Rhythm 7", Instrument: "Distortion Guitar", Pitches: []int{35, 40, 45, 50, 55, 59, 64}},
+		{Name: "Lead", Instrument: "Overdriven Guitar", Pitches: []int{36, 43, 48, 53, 57, 62}},
+		{Name: "Pad", Instrument: "Acoustic Guitar (steel)", Pitches: []int{40, 45, 50, 55, 59, 64}},
 	}
 	stdLowFirst := []int{40, 45, 50, 55, 59, 64}
 	const stdLabel = "E Standard (E A D G B E)"
@@ -107,7 +107,7 @@ func fixtures() []fixture {
 				Bars:   bars(8, map[int]int{3: 96, 6: 132}),
 			}),
 			want{Format: "gp3", Title: "Salt Lamp", Artist: "Neon Harbor", Album: "Glass Tides", TitleSource: "file", ArtistSource: "file", AlbumSource: "file",
-				Tracks: []Track{{Name: "Lead Guitar", Instrument: "Overdriven Guitar", Pitches: stdLowFirst, Tuning: stdLabel}},
+				Tracks: []Track{{Name: "Lead Guitar", Instrument: "Overdriven Guitar", Pitches: stdLowFirst}},
 				Tempos: []Tempo{{1, 132}, {4, 96}, {7, 132}}}},
 
 		{"F2", "Quiet Engines/Slow Orbit/Tin Moon.gp4",
@@ -118,8 +118,8 @@ func fixtures() []fixture {
 			}),
 			want{Format: "gp4", Title: "Tin Moon", Artist: "Quiet Engines", Album: "Slow Orbit", TitleSource: "file", ArtistSource: "file", AlbumSource: "file",
 				Tracks: []Track{
-					{Name: "Guitar", Instrument: "Distortion Guitar", Pitches: []int{38, 45, 50, 55, 59, 64}, Tuning: "Drop D (D A D G B E)"},
-					{Name: "Bass", Instrument: "Electric Bass (finger)", Pitches: []int{28, 33, 38, 43}, Tuning: "E Standard (E A D G)"},
+					{Name: "Guitar", Instrument: "Distortion Guitar", Pitches: []int{38, 45, 50, 55, 59, 64}},
+					{Name: "Bass", Instrument: "Electric Bass (finger)", Pitches: []int{28, 33, 38, 43}},
 					wantDrum("Drums"),
 				},
 				Tempos: []Tempo{{1, 90}, {3, 100}}}},
@@ -136,14 +136,14 @@ func fixtures() []fixture {
 				Bars:   bars(4, map[int]int{2: 110}),
 			}),
 			want{Format: "gp5", Title: "Rename Me", Artist: "Seventh Floor", Album: "Static Garden", TitleSource: "file", ArtistSource: "path", AlbumSource: "path",
-				Tracks: []Track{{Name: "Guitar", Instrument: "Electric Guitar (clean)", Pitches: stdLowFirst, Tuning: stdLabel}},
+				Tracks: []Track{{Name: "Guitar", Instrument: "Electric Guitar (clean)", Pitches: stdLowFirst}},
 				Tempos: []Tempo{{1, 100}, {3, 110}}}},
 
 		{"F5", "Paper Satellites/Cold Start.gpx",
 			tabfiles.GPX(tabfiles.GPIF6("Cold Start", "Paper Satellites", "Orbit Notes", [][2]float64{{0, 120}, {4, 90}},
 				gp6Guitar, tabfiles.GPIF6Track{Name: "Drums", Instrument: "drumkit", Channel: 9, Percussion: true}), true),
 			want{Format: "gp6", Title: "Cold Start", Artist: "Paper Satellites", Album: "Orbit Notes", TitleSource: "file", ArtistSource: "file", AlbumSource: "file",
-				Tracks: []Track{{Name: "Guitar", Instrument: "Electric Guitar (clean)", Pitches: stdLowFirst, Tuning: stdLabel}, wantDrum("Drums")},
+				Tracks: []Track{{Name: "Guitar", Instrument: "Electric Guitar (clean)", Pitches: stdLowFirst}, wantDrum("Drums")},
 				Tempos: []Tempo{{1, 120}, {5, 90}}}},
 
 		{"F6", "Orbit Club/Night Shift.gp",
@@ -153,9 +153,9 @@ func fixtures() []fixture {
 				tabfiles.GPIFTrack{Name: "Low", Instrument: "Electric Bass", Kind: "bass", Pitches: "28 33 38 43"})),
 			want{Format: "gp7", Title: "Night Shift", Artist: "Orbit Club", Album: "Late Hours", TitleSource: "file", ArtistSource: "file", AlbumSource: "file",
 				Tracks: []Track{
-					{Name: "Eight", Instrument: "Electric Guitar", Pitches: []int{30, 35, 40, 45, 50, 55, 59, 64}, Tuning: "Custom (F# B E A D G B E)"},
+					{Name: "Eight", Instrument: "Electric Guitar", Pitches: []int{30, 35, 40, 45, 50, 55, 59, 64}},
 					wantDrum("Kit"),
-					{Name: "Low", Instrument: "Electric Bass", Pitches: []int{28, 33, 38, 43}, Tuning: "E Standard (E A D G)"},
+					{Name: "Low", Instrument: "Electric Bass", Pitches: []int{28, 33, 38, 43}},
 				},
 				Tempos: []Tempo{{1, 128}, {3, 120.5}, {7, 128}}}},
 
@@ -175,8 +175,8 @@ func fixtures() []fixture {
 			}, "version.txt", "content.xml"),
 			want{Format: "tg", Title: "Under Glass", Artist: "Moss Cathedral", Album: "Hollow Choir", TitleSource: "file", ArtistSource: "file", AlbumSource: "file",
 				Tracks: []Track{
-					{Name: "Guitar", Instrument: "Overdriven Guitar", Pitches: stdLowFirst, Tuning: stdLabel},
-					{Name: "Bass", Instrument: "Electric Bass (finger)", Pitches: []int{28, 33, 38, 43}, Tuning: "E Standard (E A D G)"},
+					{Name: "Guitar", Instrument: "Overdriven Guitar", Pitches: stdLowFirst},
+					{Name: "Bass", Instrument: "Electric Bass (finger)", Pitches: []int{28, 33, 38, 43}},
 					wantDrum("Drums"),
 				},
 				Tempos: []Tempo{{1, 100}, {3, 140}}}},
@@ -191,7 +191,7 @@ func fixtures() []fixture {
 			tabfiles.GPX(tabfiles.GPIF6("Half Down", "Paper Satellites", "", [][2]float64{{0, 110}},
 				tabfiles.GPIF6Track{Name: "Guitar", Instrument: "a-gtr-steel", Program: 25, Channel: 1, Pitches: "38 45 50 55 59 64"}), false),
 			want{Format: "gp6", Title: "Half Down", Artist: "Paper Satellites", Album: "", TitleSource: "file", ArtistSource: "file", AlbumSource: "path",
-				Tracks: []Track{{Name: "Guitar", Instrument: "Acoustic Guitar (steel)", Pitches: []int{38, 45, 50, 55, 59, 64}, Tuning: "Drop D (D A D G B E)"}},
+				Tracks: []Track{{Name: "Guitar", Instrument: "Acoustic Guitar (steel)", Pitches: []int{38, 45, 50, 55, 59, 64}}},
 				Tempos: []Tempo{{1, 110}}}},
 
 		{"F11", "Neon Harbor/Glass Tides/Zipped.zip",
@@ -202,8 +202,8 @@ func fixtures() []fixture {
 			})}),
 			want{Format: "gp5", Title: "Zipped Song", Artist: "Neon Harbor", Album: "Glass Tides", TitleSource: "file", ArtistSource: "file", AlbumSource: "file",
 				Tracks: []Track{
-					{Name: "Guitar", Instrument: "Electric Guitar (clean)", Pitches: stdLowFirst, Tuning: stdLabel},
-					{Name: "Bass", Instrument: "Electric Bass (finger)", Pitches: []int{28, 33, 38, 43}, Tuning: "E Standard (E A D G)"},
+					{Name: "Guitar", Instrument: "Electric Guitar (clean)", Pitches: stdLowFirst},
+					{Name: "Bass", Instrument: "Electric Bass (finger)", Pitches: []int{28, 33, 38, 43}},
 				},
 				Tempos: []Tempo{{1, 120}}}},
 
@@ -293,7 +293,7 @@ func TestFixturesAgainstExpected(t *testing.T) {
 			}
 			for _, c := range []struct{ name, got, want string }{
 				{"title", s.Title, w.Title}, {"artist", s.Artist, w.Artist}, {"album", s.Album, w.Album},
-				{"title source", s.TitleSource, w.TitleSource}, {"artist source", s.ArtistSource, w.ArtistSource}, {"album source", s.AlbumSource, w.AlbumSource},
+				{"title source", string(s.TitleSource), string(w.TitleSource)}, {"artist source", string(s.ArtistSource), string(w.ArtistSource)}, {"album source", string(s.AlbumSource), string(w.AlbumSource)},
 			} {
 				if c.got != c.want {
 					t.Errorf("%s = %q, want %q", c.name, c.got, c.want)
@@ -306,7 +306,7 @@ func TestFixturesAgainstExpected(t *testing.T) {
 				t.Errorf("error = %q, want it to contain %q", s.Error, w.ErrorContains)
 			}
 			if !slices.EqualFunc(s.Tracks, w.Tracks, func(a, b Track) bool {
-				return a.Name == b.Name && a.Instrument == b.Instrument && a.Drums == b.Drums && slices.Equal(a.Pitches, b.Pitches) && a.Tuning == b.Tuning
+				return a.Name == b.Name && a.Instrument == b.Instrument && a.Drums == b.Drums && slices.Equal(a.Pitches, b.Pitches) && a.Tuning().String() == b.Tuning().String()
 			}) {
 				t.Errorf("tracks = %+v\nwant     %+v", s.Tracks, w.Tracks)
 			}

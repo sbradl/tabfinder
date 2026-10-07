@@ -8,6 +8,16 @@ import (
 
 var gpVersionRe = regexp.MustCompile(`(\d)\.(\d+)`)
 
+// Limits past which a count read from a file means the file is corrupt (or misread), not big.
+const (
+	maxMeasures = 100_000
+	maxTracks   = 128 // Guitar Pro has 64 MIDI channels; twice that is plenty
+	maxStrings  = 7   // what Guitar Pro 3-5 store per track
+	maxBeats    = 512 // per bar and voice
+	maxTempo    = 1000
+	maxBendPts  = 100
+)
+
 // parseGP reads Guitar Pro 3, 4 and 5 binary files: header, track list and
 // the note data (walked only for tempo changes).
 func parseGP(b []byte) (*Song, error) {
@@ -22,7 +32,7 @@ func parseGP(b []byte) (*Song, error) {
 	if major < 3 || major > 5 {
 		return nil, fmt.Errorf("Guitar Pro %d files are not supported", major)
 	}
-	s := &Song{Format: "gp" + m[1]}
+	s := &Song{Format: Format("gp" + m[1])}
 
 	s.Title = r.intByteSizeString()
 	r.intByteSizeString() // subtitle
@@ -83,7 +93,7 @@ func parseGP(b []byte) (*Song, error) {
 	if r.err != nil {
 		return s, r.err
 	}
-	if measures < 0 || measures > 100000 || tracks < 1 || tracks > 128 {
+	if measures < 0 || measures > maxMeasures || tracks < 1 || tracks > maxTracks {
 		return s, fmt.Errorf("implausible measure/track count %d/%d", measures, tracks)
 	}
 
@@ -193,7 +203,7 @@ func readGPTrack(r *reader, major, minor, index int, programs *[64]int) (Track, 
 	if r.err != nil {
 		return t, 0, r.err
 	}
-	if stringCount < 1 || stringCount > 7 {
+	if stringCount < 1 || stringCount > maxStrings {
 		return t, 0, fmt.Errorf("track %d: implausible string count %d", index+1, stringCount)
 	}
 
@@ -212,6 +222,5 @@ func readGPTrack(r *reader, major, minor, index int, programs *[64]int) (Track, 
 		}
 		t.Pitches = append(t.Pitches, tuning[i])
 	}
-	t.Tuning = tuningName(t.Pitches)
 	return t, stringCount, nil
 }

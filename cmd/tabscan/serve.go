@@ -7,17 +7,19 @@ import (
 	"io"
 
 	"tabfinder/internal/finder"
+	"tabfinder/internal/rows"
 )
 
 // serve answers the Android app's requests, one JSON object per line each
 // way, so its search runs on the same code as the desktop app:
 //
 //	{"op":"load","index":"/path/index.jsonl"}               -> {"songs":[...]}
-//	{"op":"scan","root":"/tabs","index":"/path/index.jsonl"} -> {"songs":[...],"unreadable":3,"warning":"..."}
+//	{"op":"scan","root":"/tabs","index":"/path/index.jsonl"} -> {"songs":[...],"unreadable":3,"summary":"948 tabs, 3 unreadable","warning":"..."}
 //	{"op":"search","query":{"artist":"am","tuning":"drop","strings":0,"name":"","bpm":""}}
-//	    -> {"matches":[0,4],"bpmInvalid":false,"artists":["Amber Marsh"],"tunings":[...]}
+//	    -> {"matches":["Amber Marsh/Dusk.gp5"],"bpmInvalid":false,"artists":["Amber Marsh"],"tunings":[...]}
 //
-// Matches index the songs of the last load or scan. Failures answer {"error":"..."}.
+// Songs are rows (internal/rows), what the app shows. Matches are the paths of the matching songs of the last load or scan, in list order, so
+// the app needn't hold the same list as this process. Failures answer {"error":"..."}.
 func serve(in io.Reader, out io.Writer) error {
 	sc := bufio.NewScanner(in)
 	sc.Buffer(nil, 1<<20)
@@ -43,7 +45,7 @@ func serve(in io.Reader, out io.Writer) error {
 					break
 				}
 				lib = finder.New(songs)
-				resp = songsResponse{Songs: songsOut(lib)}
+				resp = songsResponse{Songs: rows.All(lib)}
 			case "scan":
 				songs, err := finder.ScanIndex(req.Root, req.Index)
 				if songs == nil && err != nil {
@@ -51,12 +53,7 @@ func serve(in io.Reader, out io.Writer) error {
 					break
 				}
 				lib = finder.New(songs)
-				r := songsResponse{Songs: songsOut(lib)}
-				for _, s := range songs {
-					if s.Error != "" {
-						r.Unreadable++
-					}
-				}
+				r := songsResponse{Songs: rows.All(lib), Unreadable: rows.Unreadable(songs), Summary: rows.ScanSummary(songs)}
 				if err != nil {
 					r.Warning = err.Error()
 				}
@@ -64,10 +61,10 @@ func serve(in io.Reader, out io.Writer) error {
 			case "search":
 				res := lib.Search(req.Query)
 				resp = searchResponse{
-					Matches:    res.Matches,
+					Matches:    matchedPaths(lib, res.Matches),
 					BPMInvalid: res.BPMInvalid,
 					Artists:    lib.SuggestArtists(req.Query.Artist),
-					Tunings:    tuningsOut(finder.SuggestTunings(res.Tunings, req.Query.Tuning)),
+					Tunings:    rows.Tunings(finder.SuggestTunings(res.Tunings, req.Query.Tuning)),
 				}
 			default:
 				resp = errorResponse{fmt.Sprintf("unknown op %q", req.Op)}
@@ -85,60 +82,23 @@ type errorResponse struct {
 }
 
 type songsResponse struct {
-	Songs      []songOut `json:"songs"`
-	Unreadable int       `json:"unreadable,omitempty"`
-	Warning    string    `json:"warning,omitempty"` // an unreadable directory cut the scan short
+	Songs      []rows.Song `json:"songs"`
+	Unreadable int         `json:"unreadable,omitempty"`
+	Summary    string      `json:"summary,omitempty"` // of a scan, for the message after it
+	Warning    string      `json:"warning,omitempty"` // an unreadable directory cut the scan short
 }
 
 type searchResponse struct {
-	Matches    []int       `json:"matches"`
-	BPMInvalid bool        `json:"bpmInvalid"`
-	Artists    []string    `json:"artists"` // suggestions for the artist field
-	Tunings    []tuningOut `json:"tunings"` // suggestions for the tuning field, grouped by string count
+	Matches    []string      `json:"matches"` // paths of the matching songs
+	BPMInvalid bool          `json:"bpmInvalid"`
+	Artists    []string      `json:"artists"` // suggestions for the artist field
+	Tunings    []rows.Tuning `json:"tunings"` // suggestions for the tuning field, grouped by string count
 }
 
-// songOut is a song with what its row shows.
-type songOut struct {
-	Path       string      `json:"path"`
-	Title      string      `json:"title"`
-	Artist     string      `json:"artist"`
-	Album      string      `json:"album"`
-	Tunings    []tuningOut `json:"tunings"`
-	BPMs       []string    `json:"bpms"`
-	Unreadable bool        `json:"unreadable"` // parsing failed and there's nothing to show
-	OpenAs     string      `json:"openAs"`     // the file name to hand TuxGuitar a copy under
-}
-
-type tuningOut struct {
-	finder.Tuning
-	Label  string `json:"label"`
-	Detail string `json:"detail"` // the notes, unless they are the label already
-}
-
-func songsOut(lib *finder.Library) []songOut {
-	out := make([]songOut, len(lib.Entries))
-	for i, e := range lib.Entries {
-		out[i] = songOut{
-			Path: e.Song.Path, Title: e.Song.Title, Artist: e.Song.Artist, Album: e.Song.Album,
-			Tunings:    tuningsOut(e.Tunings),
-			BPMs:       e.BPMs,
-			Unreadable: e.Song.Error != "" && len(e.Tunings) == 0,
-			OpenAs:     finder.TuxGuitarName(e.Song),
-		}
-		if out[i].BPMs == nil {
-			out[i].BPMs = []string{}
-		}
-	}
-	return out
-}
-
-func tuningsOut(ts []finder.Tuning) []tuningOut {
-	out := make([]tuningOut, len(ts))
-	for i, t := range ts {
-		out[i] = tuningOut{Tuning: t, Label: t.Label()}
-		if t.Label() != t.Notes {
-			out[i].Detail = t.Notes
-		}
+func matchedPaths(lib *finder.Library, idx []int) []string {
+	out := make([]string, len(idx))
+	for i, m := range idx {
+		out[i] = lib.Entries[m].Song.Path
 	}
 	return out
 }

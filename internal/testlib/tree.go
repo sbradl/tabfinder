@@ -14,17 +14,17 @@ import (
 // copy, folders tabreorg skips, a file that can't be parsed and non-tab files.
 // The comment on each file says what it exercises.
 func TreeFiles() map[string][]byte {
-	g := func(title, artist, album string, tempo int, tracks ...tabfiles.GP3Track) []byte {
-		return tabfiles.GP3(tabfiles.GP3Spec{Title: title, Artist: artist, Album: album, Tempo: tempo, Tracks: tracks})
+	g := func(title, artist, album string, tempo int, tracks ...tabfiles.GPTrack) []byte {
+		return tabfiles.GP(tabfiles.GPSpec{Version: "3.00", Title: title, Artist: artist, Album: album, Tempo: tempo, Tracks: tracks})
 	}
-	guitar := func(strings ...int) tabfiles.GP3Track { return tabfiles.GP3Track{Name: "Guitar", Strings: strings} }
+	guitar := func(strings ...int) tabfiles.GPTrack { return tabfiles.GPTrack{Name: "Guitar", Strings: strings} }
 	std := guitar(tabfiles.StdGuitar...)
 	dropD := guitar(64, 59, 55, 50, 45, 38)
 	dropC := guitar(62, 57, 53, 48, 43, 36)
 	custom := guitar(62, 59, 55, 50, 43, 38) // D G D G B D
 	seven := guitar(64, 59, 55, 50, 45, 40, 35)
-	bass := tabfiles.GP3Track{Name: "Bass", Strings: []int{43, 38, 33, 28}}
-	drums := tabfiles.GP3Track{Name: "Drums", Drums: true, Strings: []int{0, 0, 0, 0, 0, 0}}
+	bass := tabfiles.GPTrack{Name: "Bass", Strings: []int{43, 38, 33, 28}}
+	drums := tabfiles.GPTrack{Name: "Drums", Drums: true, Strings: []int{0, 0, 0, 0, 0, 0}}
 
 	overload := tabfiles.GP7(tabfiles.GPIF("Brass Kettle", "Soilbed Quartet", "Glass Orchard", [][2]float64{{0, 190}, {90, 145}},
 		tabfiles.GPIFTrack{Name: "Lead", Instrument: "Electric Guitar", Kind: "electricGuitar", Pitches: "36 43 48 53 57 62"}))

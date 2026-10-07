@@ -49,6 +49,7 @@ class OpenAndLifecycleTest : DeviceTest() {
     try {
       Intents.intending(hasPackage(TuxGuitar.PACKAGE)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, null))
       compose.onNodeWithTag("song-Gorsewick/Gravel Hymns/Quartz.gpx.crdownload").performClick()
+      until { Intents.getIntents().any { it.`package` == TuxGuitar.PACKAGE } } // the copy is made off the main thread first
       Intents.intended(allOf(hasAction(Intent.ACTION_VIEW), hasPackage(TuxGuitar.PACKAGE), hasFlag(Intent.FLAG_GRANT_READ_URI_PERMISSION)))
       val intent = Intents.getIntents().single { it.`package` == TuxGuitar.PACKAGE }
       val uri = intent.data!!

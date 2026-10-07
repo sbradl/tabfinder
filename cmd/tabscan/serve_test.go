@@ -42,7 +42,7 @@ func TestServe(t *testing.T) {
 	var search searchResponse
 	lines.Scan()
 	json.Unmarshal(lines.Bytes(), &search)
-	if len(search.Matches) != 1 || search.Matches[0] != 0 || len(search.Artists) != 1 || len(search.Tunings) != 1 {
+	if len(search.Matches) != 1 || search.Matches[0] != "a/y.gp5" || len(search.Artists) != 1 || len(search.Tunings) != 1 {
 		t.Errorf("search artist am = %s", lines.Text())
 	}
 	lines.Scan()

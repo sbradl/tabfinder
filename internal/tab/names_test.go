@@ -16,8 +16,8 @@ func TestTuningName(t *testing.T) {
 		{[]int{38, 43, 50, 55, 59, 62}, "Custom (D G D G B D)"},
 	}
 	for _, tt := range tests {
-		if got := tuningName(tt.pitches); got != tt.want {
-			t.Errorf("tuningName(%v) = %q, want %q", tt.pitches, got, tt.want)
+		if got := TuningOf(tt.pitches).String(); got != tt.want {
+			t.Errorf("TuningOf(%v) = %q, want %q", tt.pitches, got, tt.want)
 		}
 	}
 }
@@ -29,7 +29,7 @@ func TestTitleFromFilename(t *testing.T) {
 		{"Argyle Moth - Nectar (ver 3 by Foo).gp5", "Argyle Moth", "Nectar"},
 		{"as_lanterns_fade_the_ferry.gp5", "As Lanterns Fade", "The Ferry"},
 		{"ripple_ver2_C.gp3", "As Lanterns Fade", "Ripple C"},
-		{"www-tablatures-tk @ Die Äther - Unpoppbar (2).gp4", "Die Äther", "Unpoppbar"},
+		{"www-example-tk @ Die Äther - Unpoppbar (2).gp4", "Die Äther", "Unpoppbar"},
 		{"Ferien, Felix - Weniger.gp4", "Felix Ferien", "Weniger"},
 		{"Cinder Choir - Viva La Lumina - 779.gp5", "Cinder Choir", "Viva La Lumina"},
 		{"as_lanterns_fade_dazzled.gpx.crdownload", "As Lanterns Fade", "Dazzled"},
@@ -52,5 +52,33 @@ func TestTempoSummary(t *testing.T) {
 	}
 	if got, want := s.TempoSummary(), "120, 90.5, 140"; got != want {
 		t.Errorf("tempoSummary() = %q, want %q", got, want)
+	}
+}
+
+func TestTitleCase(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                      "",
+		"hello world":           "Hello World",
+		"  multiple   spaces  ": "Multiple Spaces",
+		"äther öl":              "Äther Öl",
+		"ALREADY upper":         "ALREADY Upper",
+		"x":                     "X",
+	} {
+		if got := TitleCase(in); got != want {
+			t.Errorf("TitleCase(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestBareName(t *testing.T) {
+	for in, want := range map[string]string{
+		"www-example-tk @ my_song.gp5.zip": "my song",
+		"www.example.org @ Song.gp4":       "Song",
+		"Love @ First Light.gp5":           "Love @ First Light", // only a site's tag
+		"song.gpx.crdownload":              "song",
+	} {
+		if got := BareName(in); got != want {
+			t.Errorf("BareName(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

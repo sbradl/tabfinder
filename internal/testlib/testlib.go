@@ -15,22 +15,22 @@ import (
 
 // Tracks for common tunings, lowest string first.
 var (
-	EStd6   = tab.Track{Name: "Guitar", Instrument: "Distortion Guitar", Pitches: []int{40, 45, 50, 55, 59, 64}, Tuning: "E Standard (E A D G B E)"}
-	DropD6  = tab.Track{Name: "Guitar", Pitches: []int{38, 45, 50, 55, 59, 64}, Tuning: "Drop D (D A D G B E)"}
-	DropC6  = tab.Track{Name: "Guitar", Pitches: []int{36, 43, 48, 53, 57, 62}, Tuning: "Drop C (C G C F A D)"}
-	BStd7   = tab.Track{Name: "Guitar 7", Pitches: []int{35, 40, 45, 50, 55, 59, 64}, Tuning: "B Standard (B E A D G B E)"}
-	Eight   = tab.Track{Name: "Guitar 8", Pitches: []int{30, 35, 40, 45, 50, 55, 59, 64}, Tuning: "Custom (F# B E A D G B E)"}
-	Nine    = tab.Track{Name: "Guitar 9", Pitches: []int{25, 30, 35, 40, 45, 50, 55, 59, 64}, Tuning: "Custom (C# F# B E A D G B E)"}
-	Bass4   = tab.Track{Name: "Bass", Instrument: "Electric Bass (finger)", Pitches: []int{28, 33, 38, 43}, Tuning: "E Standard (E A D G)"}
-	DropC4  = tab.Track{Name: "Bass", Pitches: []int{24, 31, 36, 41}, Tuning: "Drop C (C G C F)"}
-	Bass5   = tab.Track{Name: "Bass 5", Pitches: []int{23, 28, 33, 38, 43}, Tuning: "B Standard (B E A D G)"}
-	Custom6 = tab.Track{Name: "Guitar", Pitches: []int{38, 43, 50, 55, 59, 62}, Tuning: "Custom (D G D G B D)"}
+	EStd6   = tab.Track{Name: "Guitar", Instrument: "Distortion Guitar", Pitches: []int{40, 45, 50, 55, 59, 64}}
+	DropD6  = tab.Track{Name: "Guitar", Pitches: []int{38, 45, 50, 55, 59, 64}}
+	DropC6  = tab.Track{Name: "Guitar", Pitches: []int{36, 43, 48, 53, 57, 62}}
+	BStd7   = tab.Track{Name: "Guitar 7", Pitches: []int{35, 40, 45, 50, 55, 59, 64}}
+	Eight   = tab.Track{Name: "Guitar 8", Pitches: []int{30, 35, 40, 45, 50, 55, 59, 64}}
+	Nine    = tab.Track{Name: "Guitar 9", Pitches: []int{25, 30, 35, 40, 45, 50, 55, 59, 64}}
+	Bass4   = tab.Track{Name: "Bass", Instrument: "Electric Bass (finger)", Pitches: []int{28, 33, 38, 43}}
+	DropC4  = tab.Track{Name: "Bass", Pitches: []int{24, 31, 36, 41}}
+	Bass5   = tab.Track{Name: "Bass 5", Pitches: []int{23, 28, 33, 38, 43}}
+	Custom6 = tab.Track{Name: "Guitar", Pitches: []int{38, 43, 50, 55, 59, 62}}
 	Drums   = tab.Track{Name: "Drums", Instrument: "Drums", Drums: true}
 )
 
-func song(path, format, artist, album, title string, tracks []tab.Track, tempos ...float64) *tab.Song {
+func song(path string, format tab.Format, artist, album, title string, tracks []tab.Track, tempos ...float64) *tab.Song {
 	s := &tab.Song{Path: path, Format: format, Artist: artist, Album: album, Title: title, Tracks: tracks,
-		ArtistSource: "file", AlbumSource: "file", TitleSource: "file"}
+		ArtistSource: tab.FromFile, AlbumSource: tab.FromFile, TitleSource: tab.FromFile}
 	for i, bpm := range tempos {
 		s.Tempos = append(s.Tempos, tab.Tempo{Bar: 1 + 16*i, BPM: bpm})
 	}

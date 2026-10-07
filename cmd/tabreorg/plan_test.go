@@ -23,7 +23,7 @@ func planOf(t *testing.T, files map[string][]byte, rename bool, skip ...string) 
 	if err := tab.Walk(root, root, func(s *tab.Song) { songs = append(songs, s) }); err != nil {
 		t.Fatal(err)
 	}
-	p, err := newPlanner(root, skip)
+	p, err := newPlanner(root, skip, testRules)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +401,7 @@ func TestMoves(t *testing.T) {
 		testlib.WriteFiles(t, root, files)
 		var songs []*tab.Song
 		tab.Walk(root, root, func(s *tab.Song) { songs = append(songs, s) })
-		p, _ := newPlanner(root, testConfig.Skip)
+		p, _ := newPlanner(root, testConfig.Skip, testRules)
 		places, _ := p.plan(songs, true)
 		ms := moves(places)
 		if i == 0 {

@@ -15,6 +15,7 @@ import (
 	"gioui.org/text"
 	"golang.org/x/image/math/fixed"
 
+	"tabfinder/internal/finder"
 	"tabfinder/internal/tab"
 	"tabfinder/internal/testlib"
 )
@@ -587,4 +588,18 @@ func TestRetypeAfterPick(t *testing.T) {
 			t.Errorf("query %+v, want tuning %q and no string count", h.u.in, picked)
 		}
 	})
+}
+
+// A pick takes effect in the frame that applies it: the list drawn then is already the
+// search for the picked suggestion, not the one before.
+func TestPickShowsInTheSameFrame(t *testing.T) {
+	h := libHarness(t)
+	h.clickField(&h.u.artist)
+	h.typ("amber")
+	want := len(h.u.lib.Search(finder.Query{Artist: "Amber Marsh"}).Matches)
+	h.r.Queue(key.Event{Name: key.NameReturn, State: key.Press}, key.Event{Name: key.NameReturn, State: key.Release})
+	h.frame()
+	if h.u.in.Artist != "Amber Marsh" || len(h.u.result.Matches) != want || h.u.resultIn != h.u.in {
+		t.Errorf("after one frame: query %+v, %d matches (want %d), result for %+v", h.u.in, len(h.u.result.Matches), want, h.u.resultIn)
+	}
 }

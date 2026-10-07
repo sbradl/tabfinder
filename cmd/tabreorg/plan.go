@@ -16,12 +16,13 @@ type move struct{ src, dst string } // paths relative to the root
 type planner struct {
 	root        string
 	skip        []string
+	rules       nameRules
 	artistByKey map[string]string   // key(folder) -> artist folder
 	albumDirs   map[string][]string // artist folder -> album folders
 }
 
-func newPlanner(root string, skip []string) (*planner, error) {
-	p := &planner{root: root, skip: skip, artistByKey: map[string]string{}, albumDirs: map[string][]string{}}
+func newPlanner(root string, skip []string, rules nameRules) (*planner, error) {
+	p := &planner{root: root, skip: skip, rules: rules, artistByKey: map[string]string{}, albumDirs: map[string][]string{}}
 	artists, err := subdirs(root)
 	if err != nil {
 		return nil, err
@@ -75,11 +76,20 @@ type placement struct {
 //     as clashes;
 //   - other name collisions get a " (2)" suffix. Nothing is overwritten.
 func (p *planner) plan(songs []*tab.Song, rename bool) (places []*placement, clashes [][]string) {
-	type candidate struct {
-		pl            *placement
-		artist, album string
-	}
-	var cands []candidate
+	places, moving := p.candidates(songs)
+	p.placeInAlbums(moving)
+	names, clashing, clashes := p.names(places, rename)
+	return places, append(clashes, p.finalPaths(places, names, clashing)...)
+}
+
+// candidate is a loose tab that may move: to this artist's folder, and the album's.
+type candidate struct {
+	pl            *placement
+	artist, album string // album "" for none
+}
+
+// candidates places every tab in its current folder and picks the loose ones that may move.
+func (p *planner) candidates(songs []*tab.Song) (places []*placement, moving []candidate) {
 	for _, s := range songs {
 		pl := &placement{song: s, dir: path.Dir(s.Path)}
 		if pl.dir == "." {
@@ -91,7 +101,7 @@ func (p *planner) plan(songs []*tab.Song, rename bool) (places []*placement, cla
 			continue
 		}
 		metaArtist := ""
-		if s.ArtistSource == "file" && !reJunkArtist.MatchString(s.Artist) {
+		if s.ArtistSource == tab.FromFile && !p.rules.junkArtistName(s.Artist) {
 			metaArtist = s.Artist
 		}
 		var artist string
@@ -110,16 +120,20 @@ func (p *planner) plan(songs []*tab.Song, rename bool) (places []*placement, cla
 			}
 		}
 		album := ""
-		if s.AlbumSource == "file" {
-			album = cleanAlbum(s.Album)
+		if s.AlbumSource == tab.FromFile {
+			album = p.rules.cleanAlbum(s.Album)
 		}
-		cands = append(cands, candidate{pl, artist, album})
+		moving = append(moving, candidate{pl, artist, album})
 	}
+	return places, moving
+}
 
-	// Album names without an existing folder are merged by similarity per artist.
+// placeInAlbums sets the folder of each candidate: an existing album folder that matches its
+// album, or a new one. New album names are merged by similarity per artist.
+func (p *planner) placeInAlbums(moving []candidate) {
 	newAlbums := map[string][]string{}
 	var artistOrder []string
-	for _, c := range cands {
+	for _, c := range moving {
 		if c.album != "" && p.existingAlbum(c.artist, c.album) == "" {
 			if _, ok := newAlbums[c.artist]; !ok {
 				artistOrder = append(artistOrder, c.artist)
@@ -127,7 +141,7 @@ func (p *planner) plan(songs []*tab.Song, rename bool) (places []*placement, cla
 			newAlbums[c.artist] = append(newAlbums[c.artist], c.album)
 		}
 	}
-	canonical := map[[2]string]string{}
+	canonical := map[[2]string]string{} // {artist, album as found} -> folder
 	for _, artist := range artistOrder {
 		var clusters [][]string
 		for _, n := range newAlbums[artist] {
@@ -144,7 +158,7 @@ func (p *planner) plan(songs []*tab.Song, rename bool) (places []*placement, cla
 			}
 		}
 	}
-	for _, c := range cands {
+	for _, c := range moving {
 		folder := ""
 		if c.album != "" {
 			if folder = p.existingAlbum(c.artist, c.album); folder == "" {
@@ -153,29 +167,32 @@ func (p *planner) plan(songs []*tab.Song, rename bool) (places []*placement, cla
 		}
 		c.pl.dir = path.Join(c.artist, folder)
 	}
+}
 
-	// File names.
-	desired := map[*placement]string{}
-	groups := map[[2]string][]*placement{}
+// names picks the file name of every tab: its own, or with rename the song's. Tabs that would
+// get the same new name in one folder keep theirs; they are clashing, and listed as clashes.
+func (p *planner) names(places []*placement, rename bool) (names map[*placement]string, clashing map[*placement]bool, clashes [][]string) {
+	names = map[*placement]string{}
+	groups := map[[2]string][]*placement{} // {folder, lower-case name}
 	var groupOrder [][2]string
 	for _, pl := range places {
 		orig := path.Base(pl.song.Path)
-		desired[pl] = orig
+		names[pl] = orig
 		if rename && !p.skipped(pl.song.Path) {
-			if name := songName(pl.song); name != "" {
-				desired[pl] = name + tabExt(orig)
+			if name := p.rules.songName(pl.song); name != "" {
+				names[pl] = name + tabExt(orig)
 			}
 		}
-		g := [2]string{pl.dir, strings.ToLower(desired[pl])}
+		g := [2]string{pl.dir, strings.ToLower(names[pl])}
 		if _, ok := groups[g]; !ok {
 			groupOrder = append(groupOrder, g)
 		}
 		groups[g] = append(groups[g], pl)
 	}
-	clashing := map[*placement]bool{}
+	clashing = map[*placement]bool{}
 	for _, g := range groupOrder {
 		members := groups[g]
-		renamed := slices.ContainsFunc(members, func(pl *placement) bool { return desired[pl] != path.Base(pl.song.Path) })
+		renamed := slices.ContainsFunc(members, func(pl *placement) bool { return names[pl] != path.Base(pl.song.Path) })
 		if len(members) > 1 && renamed {
 			var paths []string
 			for _, pl := range members {
@@ -185,9 +202,13 @@ func (p *planner) plan(songs []*tab.Song, rename bool) (places []*placement, cla
 			clashes = append(clashes, paths)
 		}
 	}
+	return names, clashing, clashes
+}
 
-	// Final paths. Any existing file blocks a name (as does an earlier
-	// placement), except the tab's own current path.
+// finalPaths sets every tab's destination. Any existing file blocks a name (as does an
+// earlier placement), except the tab's own current path: a new name that's blocked is given
+// up (a clash), and a kept one gets a " (2)" suffix.
+func (p *planner) finalPaths(places []*placement, names map[*placement]string, clashing map[*placement]bool) (clashes [][]string) {
 	taken := map[string]bool{} // lower-case final paths
 	blocked := func(rel, own string) bool {
 		if taken[strings.ToLower(rel)] {
@@ -201,7 +222,7 @@ func (p *planner) plan(songs []*tab.Song, rename bool) (places []*placement, cla
 		orig := path.Base(own)
 		name := orig
 		if !clashing[pl] {
-			name = desired[pl]
+			name = names[pl]
 		}
 		if name != orig && blocked(path.Join(pl.dir, name), own) {
 			clashes = append(clashes, []string{path.Join(pl.dir, orig), path.Join(pl.dir, name)})
@@ -216,7 +237,7 @@ func (p *planner) plan(songs []*tab.Song, rename bool) (places []*placement, cla
 		pl.final = final
 		taken[strings.ToLower(final)] = true
 	}
-	return places, clashes
+	return clashes
 }
 
 // existingAlbum returns the artist's album folder matching album, if any.

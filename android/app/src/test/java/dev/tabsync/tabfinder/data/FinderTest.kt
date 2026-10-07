@@ -52,6 +52,9 @@ class FinderTest {
     assertNull(r.warning)
     assertTrue(r.songs.single { it.title == "Garbled" }.unreadable)
     assertEquals("Brass Kettle.tg", r.songs.last().openAs)
+    // What the rows show comes worked out from tabscan (internal/rows).
+    assertEquals("Soilbed Quartet · Glass Orchard", r.songs.last().subtitle)
+    assertEquals("5 tabs, 1 unreadable", r.summary)
     assertTrue(b.index.isFile)
     // A second Finder over the same data folder reads the scan from the index.
     assertEquals(r.songs, Finder(hostTabscan(), b.dataDir, b.store).load())
@@ -91,13 +94,14 @@ class FinderTest {
     val songs = b.finder.scan().songs
 
     val all = b.finder.search(Query())
-    assertEquals(songs.indices.toList(), all.matches)
+    assertEquals(songs.map { it.path }, all.matches)
     assertFalse(all.bpmInvalid)
     assertEquals(listOf("Amber Marsh", "Broken", "INKWELL FLAMINGOS", "Soilbed Quartet"), all.artists) // a tie of spellings goes to the first in byte order)
 
     val r = b.finder.search(Query(artist = "inkwell flamingos"))
-    assertEquals(listOf("Mirage", "Paper Ride"), r.matches.map { songs[it].title })
-    assertEquals(emptyList<Int>(), b.finder.search(Query(artist = "nobody")).matches)
+    val byPath = songs.associateBy { it.path }
+    assertEquals(listOf("Mirage", "Paper Ride"), r.matches.map { byPath.getValue(it).title })
+    assertEquals(emptyList<String>(), b.finder.search(Query(artist = "nobody")).matches)
     assertTrue(b.finder.search(Query(bpm = "fast")).bpmInvalid)
     // Suggestions follow what's typed.
     assertEquals(listOf("Amber Marsh"), b.finder.search(Query(artist = "amber")).artists)

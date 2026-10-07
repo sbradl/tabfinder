@@ -26,7 +26,7 @@ func main() {
 }
 
 func run(w *app.Window) error {
-	u := newUI(w.Invalidate)
+	u := newUI(w.Invalidate, userDirs(), systemClock)
 	var ops op.Ops
 	for {
 		switch e := w.Event().(type) {

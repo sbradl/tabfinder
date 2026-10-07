@@ -9,19 +9,23 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
 
-	"tabfinder/internal/finder"
 	"tabfinder/internal/tab"
+	"tabfinder/internal/tuxguitar"
 )
 
-var (
-	configDir = xdgDir("XDG_CONFIG_HOME", ".config")
-	cacheDir  = xdgDir("XDG_CACHE_HOME", ".cache")
-	indexFile = filepath.Join(cacheDir, "index.jsonl") // tabscan -json format
-)
+// dirs is where the app keeps its files: the folder setting, the saved scan and the copies it
+// opens TuxGuitar on. Tests point it at temp dirs.
+type dirs struct{ config, cache string }
+
+// userDirs is ~/.config/tabfinder and ~/.cache/tabfinder, or where XDG_CONFIG_HOME and XDG_CACHE_HOME say.
+func userDirs() dirs {
+	return dirs{xdgDir("XDG_CONFIG_HOME", ".config"), xdgDir("XDG_CACHE_HOME", ".cache")}
+}
+
+// index is the saved scan, in tabscan -json format.
+func (d dirs) index() string { return filepath.Join(d.cache, "index.jsonl") }
 
 func xdgDir(env, fallback string) string {
 	if d := os.Getenv(env); d != "" {
@@ -35,54 +39,35 @@ type config struct {
 	Root string `json:"root"`
 }
 
-func loadRoot() string {
-	var c config
-	if b, err := os.ReadFile(filepath.Join(configDir, "config.json")); err == nil {
-		json.Unmarshal(b, &c)
-		return c.Root
+// loadRoot reads the tab folder from config.json; none is no folder. A config.json that
+// can't be read is an error, and no folder.
+func (d dirs) loadRoot() (string, error) {
+	file := filepath.Join(d.config, "config.json")
+	b, err := os.ReadFile(file)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	} else if err != nil {
+		return "", err
 	}
-	return legacyRoot()
+	var c config
+	if err := json.Unmarshal(b, &c); err != nil {
+		return "", fmt.Errorf("%s: %w", file, err)
+	}
+	return c.Root, nil
 }
 
-func saveRoot(root string) error {
+func (d dirs) saveRoot(root string) error {
 	b, _ := json.MarshalIndent(config{Root: root}, "", "  ")
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
+	if err := os.MkdirAll(d.config, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(configDir, "config.json"), append(b, '\n'), 0o644)
+	return os.WriteFile(filepath.Join(d.config, "config.json"), append(b, '\n'), 0o644)
 }
 
-// legacyRoot reads the folder from the settings.properties the earlier
-// Compose desktop app wrote (Java properties escaping).
-func legacyRoot() string {
-	b, err := os.ReadFile(filepath.Join(configDir, "settings.properties"))
-	if err != nil {
-		return ""
-	}
-	for line := range strings.Lines(string(b)) {
-		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "root="); ok {
-			return unescapeProperty(v)
-		}
-	}
-	return ""
-}
-
-var propEscape = regexp.MustCompile(`\\u[0-9a-fA-F]{4}|\\.`)
-
-func unescapeProperty(v string) string {
-	return propEscape.ReplaceAllStringFunc(v, func(e string) string {
-		if len(e) == 6 {
-			r, _ := strconv.ParseUint(e[2:], 16, 16)
-			return string(rune(r))
-		}
-		return e[1:]
-	})
-}
-
-func dropIndex() { os.Remove(indexFile) }
+func (d dirs) dropIndex() { os.Remove(d.index()) }
 
 // pickFolder asks for the tab folder with KDE's or GNOME's own dialog.
-// It returns "" if the dialog was cancelled.
+// It returns "" if the dialog was cancelled (exit status 1, for both).
 func pickFolder(start string) (string, error) {
 	if start == "" {
 		start, _ = os.UserHomeDir()
@@ -96,10 +81,17 @@ func pickFolder(start string) (string, error) {
 			continue
 		}
 		out, err := exec.Command(d[0], d[1:]...).Output()
-		if err != nil {
+		var exit *exec.ExitError
+		switch {
+		case err == nil:
+			return strings.TrimSpace(string(out)), nil
+		case errors.As(err, &exit) && exit.ExitCode() == 1:
 			return "", nil // cancelled
+		case errors.As(err, &exit) && len(bytes.TrimSpace(exit.Stderr)) > 0:
+			return "", fmt.Errorf("%s: %w: %s", d[0], err, bytes.TrimSpace(exit.Stderr))
+		default:
+			return "", fmt.Errorf("%s: %w", d[0], err)
 		}
-		return strings.TrimSpace(string(out)), nil
 	}
 	return "", errors.New("install kdialog or zenity to choose a folder")
 }
@@ -107,10 +99,10 @@ func pickFolder(start string) (string, error) {
 // openInTuxGuitar opens correctly named files in place, so edits save to
 // the original; misnamed ones (.crdownload, .zip, wrong gp version) go via
 // a copy with the extension of their real format.
-func openInTuxGuitar(root string, s *tab.Song) error {
+func (d dirs) openInTuxGuitar(root string, s *tab.Song) error {
 	path := filepath.Join(root, filepath.FromSlash(s.Path))
-	if !finder.OpensInPlace(s) {
-		dst := filepath.Join(cacheDir, "open", finder.TuxGuitarName(s))
+	if !tuxguitar.OpensInPlace(s) {
+		dst := filepath.Join(d.cache, "open", tuxguitar.FileName(s))
 		if err := copyFile(path, dst); err != nil {
 			return err
 		}

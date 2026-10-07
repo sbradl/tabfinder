@@ -30,15 +30,18 @@ func parseGPX(b []byte) (*Song, error) {
 	if !ok {
 		return nil, errors.New("gpx: no score.gpif in container")
 	}
-	return parseGPIF(gpif, "gp6")
+	return parseGPIF(gpif, FormatGP6)
 }
+
+// maxGPXSize caps the decompressed size a Guitar Pro 6 file claims; scores are a few MB at most.
+const maxGPXSize = 256 << 20
 
 func bcfzDecompress(b []byte) ([]byte, error) {
 	if len(b) < 4 {
 		return nil, errors.New("gpx: truncated header")
 	}
 	expected := int(binary.LittleEndian.Uint32(b))
-	if expected <= 0 || expected > 256<<20 {
+	if expected <= 0 || expected > maxGPXSize {
 		return nil, errors.New("gpx: implausible decompressed size")
 	}
 	br := &bitReader{b: b[4:]}
@@ -186,7 +189,7 @@ type gpifDoc struct {
 }
 
 // parseGPIF reads the XML score shared by Guitar Pro 6 (.gpx) and 7+ (.gp).
-func parseGPIF(data []byte, format string) (*Song, error) {
+func parseGPIF(data []byte, format Format) (*Song, error) {
 	doc, err := decodeGPIFHeader(data)
 	if err != nil {
 		return nil, err
@@ -299,7 +302,6 @@ func gpifToTrack(gt gpifTrack) Track {
 		if len(t.Pitches) > 1 && t.Pitches[0] > t.Pitches[len(t.Pitches)-1] {
 			slices.Reverse(t.Pitches)
 		}
-		t.Tuning = tuningName(t.Pitches)
 		break
 	}
 	return t

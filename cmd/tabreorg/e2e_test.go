@@ -600,3 +600,18 @@ func TestSummaryDuplicates(t *testing.T) {
 		t.Errorf("Brass Kettle group:\n%s", group)
 	}
 }
+
+// With no folders to leave alone, the summary doesn't say it left nothing alone.
+func TestSummaryWithoutSkip(t *testing.T) {
+	root := testlib.Tree(t)
+	if _, stderr, code := reorg(t, "-skip=", root); code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	s := string(mustRead(t, root+"-reorg-summary.md"))
+	if strings.Contains(s, "Left untouched") {
+		t.Errorf("summary mentions skipped folders:\n%s", s[:min(len(s), 300)])
+	}
+	if !strings.Contains(s, "tab files scanned") || !strings.Contains(s, "## Files without album") {
+		t.Errorf("summary incomplete:\n%s", s[:min(len(s), 300)])
+	}
+}

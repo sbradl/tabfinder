@@ -27,7 +27,7 @@ class FinderProcessTest {
   @Test
   fun `a killed tabscan is restarted and the songs replayed`() = runBlocking {
     val (b, songs) = scanned()
-    assertEquals(listOf(1), b.finder.search(Query(artist = "soil")).matches)
+    assertEquals(listOf(songs[1].path), b.finder.search(Query(artist = "soil")).matches)
     repeat(3) { round ->
       val kids = children()
       assertEquals("round $round", 1, kids.size)
@@ -35,7 +35,7 @@ class FinderProcessTest {
       kids.forEach { while (it.isAlive) Thread.sleep(5) }
       // The next search starts it again, loads the saved scan, and answers as before.
       val r = b.finder.search(Query(artist = "soil"))
-      assertEquals("round $round", listOf(1), r.matches)
+      assertEquals("round $round", listOf(songs[1].path), r.matches)
       assertEquals(songs.size, b.finder.search(Query()).matches.size)
     }
     b.finder.search(Query()) // leave nothing half-done
@@ -77,6 +77,28 @@ class FinderProcessTest {
   }
 
   @Test
+  fun `a tabscan that doesn't answer is stopped and reported`() {
+    val fake = tmp.fakeBinary("read line; exec sleep 30") // exec: a child process would keep the pipe open after the kill
+    val b = Backend(tmp, fake, timeouts = Timeouts(searchMs = 300, loadMs = 300)) // the retry replays the saved scan first
+    val start = System.nanoTime()
+    val e = runCatching { runBlocking { b.finder.search(Query()) } }.exceptionOrNull()
+    assertEquals("tabscan didn't answer within 0.3 s", e?.message)
+    assertTrue("stopped in time (tried twice)", System.nanoTime() - start < 5_000_000_000)
+  }
+
+  @Test
+  fun `a failed scan is not retried, a failed search is`() {
+    val starts = tmp.newFile("starts")
+    val fake = tmp.fakeBinary("echo start >> '${starts.path}'; read line; exit 1")
+    val b = Backend(tmp, fake)
+    b.finder.root = "/x"
+    assertTrue(runCatching { runBlocking { b.finder.scan() } }.isFailure)
+    assertEquals("one start for the scan", 1, starts.readLines().size)
+    assertTrue(runCatching { runBlocking { b.finder.search(Query()) } }.isFailure)
+    assertEquals("two more for the search", 3, starts.readLines().size)
+  }
+
+  @Test
   fun `a missing binary is an error, not a hang`() {
     val e = runCatching { runBlocking { Backend(tmp, java.io.File("/no/such/tabscan")).finder.load() } }.exceptionOrNull()
     assertTrue("$e", e != null)
@@ -95,7 +117,7 @@ class FinderProcessTest {
   fun `null lists in tunings read as empty`() = runBlocking {
     val fake =
       tmp.fakeBinary(
-        """while read line; do echo '{"matches":[0],"artists":["A"],"tunings":[{"strings":6,"name":"Drop C","notes":"C G C F A D","label":"Drop C","detail":null,"extra":1}]}'; done"""
+        """while read line; do echo '{"matches":["a.gp5"],"artists":["A"],"tunings":[{"strings":6,"name":"Drop C","notes":"C G C F A D","label":"Drop C","detail":null,"extra":1}]}'; done"""
       )
     val r = Backend(tmp, fake).finder.search(Query())
     assertEquals(listOf(Tuning(6, "Drop C", "C G C F A D", "Drop C", "")), r.tunings)
@@ -124,7 +146,7 @@ class FinderProcessTest {
     val fake = tmp.fakeBinary("""while read line; do echo '{"songs":[],"unreadable":3,"warning":"/x: permission denied"}'; done""")
     val b = Backend(tmp, fake)
     b.finder.root = "/x"
-    assertEquals(ScanResult(emptyList(), 3, "/x: permission denied"), b.finder.scan())
+    assertEquals(ScanResult(emptyList(), 3, warning = "/x: permission denied"), b.finder.scan())
   }
 
   @Test

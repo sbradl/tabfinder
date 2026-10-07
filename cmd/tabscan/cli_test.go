@@ -26,8 +26,8 @@ func TestTSVWriter(t *testing.T) {
 		Path: "A/B/c.gp5", Artist: "Art\tist", Album: "Al\nbum", Title: "Ti\r\ntle",
 		Tempos: []tab.Tempo{{Bar: 1, BPM: 120}, {Bar: 9, BPM: 90.5}, {Bar: 17, BPM: 120}},
 		Tracks: []tab.Track{
-			{Name: "Lead", Instrument: "Distortion Guitar", Tuning: "Drop C (C G C F A D)"},
-			{Name: "Bass", Instrument: "bass", Tuning: "E Standard (E A D G)"}, // same as the name, ignoring case
+			{Name: "Lead", Instrument: "Distortion Guitar", Pitches: testlib.DropC6.Pitches},
+			{Name: "Bass", Instrument: "bass", Pitches: testlib.Bass4.Pitches}, // same as the name, ignoring case
 			{Name: "Drums", Instrument: "Drums", Drums: true},
 			{Name: "Voice"}, // no instrument at all
 			{Name: "Keys", Instrument: "Piano\tx"},
@@ -134,7 +134,7 @@ func TestCLIGolden(t *testing.T) {
 				json.Unmarshal([]byte(l), &overload)
 			}
 		}
-		if overload.Format != "gp7" || len(overload.Tracks) != 1 || overload.Tracks[0].Tuning != "Drop C (C G C F A D)" || len(overload.Tempos) != 2 || overload.Tempos[1] != (tab.Tempo{Bar: 91, BPM: 145}) {
+		if overload.Format != "gp7" || len(overload.Tracks) != 1 || overload.Tracks[0].Tuning().String() != "Drop C (C G C F A D)" || len(overload.Tempos) != 2 || overload.Tempos[1] != (tab.Tempo{Bar: 91, BPM: 145}) {
 			t.Errorf("overload = %+v", overload)
 		}
 		// HTML isn't escaped, non-ASCII stays as is.
@@ -289,7 +289,7 @@ func TestCLIDefaultsToCurrentDirectory(t *testing.T) {
 func TestCLIWarnings(t *testing.T) {
 	root := t.TempDir()
 	testlib.WriteFiles(t, root, map[string][]byte{
-		"Art/Alb/ok.gp3":       tabfiles.GP3(tabfiles.GP3Spec{Title: "OK", Tempo: 120, Tracks: []tabfiles.GP3Track{{Name: "G", Strings: tabfiles.StdGuitar}}}),
+		"Art/Alb/ok.gp3":       tabfiles.GP(tabfiles.GPSpec{Version: "3.00", Title: "OK", Tempo: 120, Tracks: []tabfiles.GPTrack{{Name: "G", Strings: tabfiles.StdGuitar}}}),
 		"Art/Alb/broken.gp5":   []byte("junk"),
 		"Art/Alb/empty.gp4":    {},
 		"Art/Alb/in a zip.zip": tabfiles.Zip(map[string][]byte{"readme.txt": []byte("x")}),

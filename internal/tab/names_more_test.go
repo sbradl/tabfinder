@@ -43,8 +43,8 @@ func TestTuningNameMore(t *testing.T) {
 		{"spelling Bb", []int{34, 39, 44, 49, 53, 58}, "Bb Standard (Bb Eb Ab C# F Bb)"},
 	}
 	for _, tt := range tests {
-		if got := tuningName(tt.pitches); got != tt.want {
-			t.Errorf("%s: tuningName(%v) = %q, want %q", tt.name, tt.pitches, got, tt.want)
+		if got := TuningOf(tt.pitches).String(); got != tt.want {
+			t.Errorf("%s: TuningOf(%v) = %q, want %q", tt.name, tt.pitches, got, tt.want)
 		}
 	}
 }
@@ -60,6 +60,10 @@ func TestTitleFromFilenameMore(t *testing.T) {
 		{"zip", "Argyle Moth - Nectar.gp5.zip", []string{"Argyle Moth"}, "Nectar"},
 		{"plain zip", "Nectar.zip", nil, "Nectar"},
 		{"other artist", "Soilbed Quartet - Brass Kettle.gp4", []string{"Argyle Moth"}, "Brass Kettle"},
+		{"variant after dash", "Nectar - Acoustic Version.gp5", []string{"Argyle Moth"}, "Nectar - Acoustic Version"},
+		{"live after dash", "Nectar - Live.gp5", []string{"Argyle Moth"}, "Nectar - Live"},
+		{"artist, then variant", "Argyle Moth - Nectar - Radio Edit.gp5", []string{"Argyle Moth"}, "Nectar - Radio Edit"},
+		{"other artist, then variant", "Soilbed Quartet - Brass Kettle - Live.gp4", []string{"Argyle Moth"}, "Brass Kettle - Live"},
 		{"no separator, other artist", "Brass Kettle.gp4", []string{"Argyle Moth"}, "Brass Kettle"},
 		{"artist with space only", "Argyle Moth Nectar.gp5", []string{"Argyle Moth"}, "Nectar"},
 		{"artist dash no space", "Argyle Moth- Nectar.gp5", []string{"Argyle Moth"}, "Nectar"},
@@ -84,7 +88,7 @@ func TestTitleFromFilenameMore(t *testing.T) {
 		{"only junk", "(Tabbed By Foo).gp5", nil, ""},
 		{"only version", "(ver 2).gp5", nil, ""},
 		{"whitespace collapsed", "Nectar    Part   2.gp5", nil, "Nectar Part 2"},
-		{"tablatures prefix", "www-tablatures-tk @ Nectar.gp4", nil, "Nectar"},
+		{"site tag prefix", "www-example-tk @ Nectar.gp4", nil, "Nectar"},
 		{"blank artist ignored", "Nectar.gp5", []string{"", "  "}, "Nectar"},
 	}
 	for _, tt := range tests {
@@ -131,28 +135,6 @@ func FuzzTitleFromFilename(f *testing.F) {
 			t.Errorf("invalid UTF-8 result %q from valid input", got)
 		}
 	})
-}
-
-func FuzzParseBPMRange(f *testing.F) {
-	for _, s := range []string{"120", "100-140", "180-", "-90", "-", "--5", "", " 1 - 2 ", "1e3", "Inf", "-Inf", "0x10", "1_0"} {
-		f.Add(s)
-	}
-	f.Fuzz(func(t *testing.T, in string) {
-		min, max, err := ParseBPMRange(in)
-		if err == nil && !(min <= max) {
-			t.Errorf("ParseBPMRange(%q) = %v, %v without error", in, min, max)
-		}
-	})
-}
-
-// strconv.ParseFloat accepts "NaN", which compares false with everything:
-// it passes the min > max check and then no tempo ever matches.
-func TestParseBPMRangeRejectsNaN(t *testing.T) {
-	for _, in := range []string{"NaN", "nan", "1-NaN", "NaN-5", "NaN-NaN"} {
-		if min, max, err := ParseBPMRange(in); err == nil {
-			t.Errorf("ParseBPMRange(%q) = %v, %v without error", in, min, max)
-		}
-	}
 }
 
 // Found by fuzzing: lowering the case changes the byte length of invalid UTF-8

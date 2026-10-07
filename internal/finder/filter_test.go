@@ -1,8 +1,10 @@
-package tab
+package finder
 
 import (
 	"math"
 	"testing"
+
+	"tabfinder/internal/tab"
 )
 
 func TestParseBPMRange(t *testing.T) {
@@ -20,7 +22,8 @@ func TestParseBPMRange(t *testing.T) {
 		{"-", 0, 0, true},
 	}
 	for _, tt := range tests {
-		min, max, err := ParseBPMRange(tt.in)
+		r, err := ParseBPMRange(tt.in)
+		min, max := r.Min, r.Max
 		if (err != nil) != tt.err || (!tt.err && (min != tt.min || max != tt.max)) {
 			t.Errorf("ParseBPMRange(%q) = %v, %v, %v", tt.in, min, max, err)
 		}
@@ -28,16 +31,16 @@ func TestParseBPMRange(t *testing.T) {
 }
 
 func TestFilter(t *testing.T) {
-	s := &Song{
+	s := &tab.Song{
 		Path:   "Metro Kettle/Master of Marionettes/Metro Kettle - Master of Marionettes.gp3",
 		Artist: "Metro Kettle",
 		Title:  "Master of Marionettes",
-		Tracks: []Track{
+		Tracks: []tab.Track{
 			{Name: "Drums", Drums: true},
-			{Name: "Guitar", Pitches: []int{37, 44, 49, 54, 58, 63}, Tuning: "Drop C# (C# Ab C# F# Bb Eb)"},
-			{Name: "Bass", Pitches: []int{25, 32, 37, 42}, Tuning: "Drop C# (C# Ab C# F#)"},
+			{Name: "Guitar", Pitches: []int{37, 44, 49, 54, 58, 63}},
+			{Name: "Bass", Pitches: []int{25, 32, 37, 42}},
 		},
-		Tempos: []Tempo{{Bar: 1, BPM: 212}, {Bar: 120, BPM: 140}},
+		Tempos: []tab.Tempo{{Bar: 1, BPM: 212}, {Bar: 120, BPM: 140}},
 	}
 	tests := []struct {
 		f    Filter
@@ -51,9 +54,9 @@ func TestFilter(t *testing.T) {
 		{Filter{Tuning: "Drop Db"}, true},
 		{Filter{Tuning: "C# Ab C# F# Bb Eb"}, true},
 		{Filter{Tuning: "drop c"}, false},
-		{Filter{BPMSet: true, BPMMin: 130, BPMMax: 150}, true},
-		{Filter{BPMSet: true, BPMMin: 150, BPMMax: 200}, false},
-		{Filter{Artist: "metro kettle", Tuning: "drop c#", BPMSet: true, BPMMin: 200, BPMMax: 250}, true},
+		{Filter{BPM: &BPMRange{130, 150}}, true},
+		{Filter{BPM: &BPMRange{150, 200}}, false},
+		{Filter{Artist: "metro kettle", Tuning: "drop c#", BPM: &BPMRange{200, 250}}, true},
 		// String count, matched on the same track as the tuning.
 		{Filter{Strings: 6}, true},
 		{Filter{Strings: 7}, false},

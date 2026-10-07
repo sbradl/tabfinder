@@ -26,8 +26,8 @@ Same artist + same song title (or byte-identical). 1 groups contain byte-identic
 
 | File | Format | Size | Tracks | Main tuning | Note |
 |---|---|---|---|---|---|
-| `Metro Kettle/Tan Album/Enter Daydream (ver 1).gp3` | gp3 | 0 KB | 1 | Drop D |  |
-| `Metro Kettle/Tan Album/Enter Daydream (ver 2).gp3` | gp3 | 0 KB | 1 | B Standard |  |
+| `Metro Kettle/Tan Album/Enter Daydream (ver 1).gp3` | gp3 | 1 KB | 1 | Drop D |  |
+| `Metro Kettle/Tan Album/Enter Daydream (ver 2).gp3` | gp3 | 1 KB | 1 | B Standard |  |
 
 ### Soilbed Quartet – Brass Kettle
 

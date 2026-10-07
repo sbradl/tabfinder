@@ -3,77 +3,31 @@ package tab
 import (
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 )
 
-var noteNames = [12]string{"C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"}
-
-func noteName(midi int) string { return noteNames[(midi%12+12)%12] }
-
-// Standard tuning intervals (semitones above the lowest string) by string count.
-var standardIntervals = map[int][]int{
-	4: {0, 5, 10, 15},             // bass
-	5: {0, 5, 10, 15, 20},         // 5-string bass
-	6: {0, 5, 10, 15, 19, 24},     // guitar
-	7: {0, 5, 10, 15, 20, 24, 29}, // 7-string guitar
-}
-
-// tuningName labels pitches (lowest string first), e.g. "Drop C (C G C F A D)".
-func tuningName(p []int) string {
-	if len(p) == 0 {
-		return ""
-	}
-	notes := make([]string, len(p))
-	for i, n := range p {
-		notes[i] = noteName(n)
-	}
-	label := "Custom"
-	if std, ok := standardIntervals[len(p)]; ok {
-		rel := make([]int, len(p))
-		for i, n := range p {
-			rel[i] = n - p[0]
-		}
-		// A drop tuning is standard with only the lowest string 2 semitones down.
-		dropped := slices.Clone(rel)
-		for i := 1; i < len(dropped); i++ {
-			dropped[i] -= 2
-		}
-		switch {
-		case slices.Equal(rel, std):
-			label = noteName(p[0]) + " Standard"
-		case slices.Equal(dropped, std):
-			label = "Drop " + noteName(p[0])
-		}
-	}
-	return label + " (" + strings.Join(notes, " ") + ")"
-}
-
 var (
 	reVersionTag = regexp.MustCompile(`(?i)\s*\((ver ?\d+[^)]*|\d+|pro|complete)\)`)
 	reVerSuffix  = regexp.MustCompile(`(?i)\s+(ver\s?\d+|v\d+)\b`)
 	reIDSuffix   = regexp.MustCompile(`\s+-\s+\d+$`)
-	// JunkBracket matches "(Tabbed By X - www.example.org ...)", "[by x@y.com]" and the like.
-	JunkBracket = regexp.MustCompile(`(?i)\s*[\(\[][^\)\]]*(tabbed|www\.|@|\bby\b)[^\)\]]*([\)\]]|$)`)
-	reSpaces    = regexp.MustCompile(`\s+`)
+	// reSiteTag matches the site a download came from, put in front of its name: "www-example-tk @ ".
+	reSiteTag = regexp.MustCompile(`(?i)^www[.-]\S* @ `)
+	// reJunkBracket matches "(Tabbed By X - www.example.org ...)", "[by x@y.com]" and the like.
+	reJunkBracket = regexp.MustCompile(`(?i)\s*[\(\[][^\)\]]*(tabbed|www\.|@|\bby\b)[^\)\]]*([\)\]]|$)`)
+	// reVariant matches what follows " - " in "Title - Acoustic Version": a variant of the
+	// song, not the title after an artist's name.
+	reVariant = regexp.MustCompile(`(?i)^(acoustic|live|unplugged|demo|instrumental|remix|remastered|radio edit|edit|reprise|intro|outro|solo|cover|bonus|part \d+|pt\.? ?\d+|\w+ (version|mix|edit))\b`)
 )
 
 // titleFromFilename derives a song title from names like
 // "Argyle Moth - Nectar (ver 3 by X).gp5" or "as_lanterns_fade_the_ferry.gp5".
 func titleFromFilename(name string, artists ...string) string {
-	for _, ext := range []string{".crdownload", ".zip"} {
-		name = strings.TrimSuffix(name, ext)
-	}
-	name = strings.TrimSuffix(name, filepath.Ext(name))
-	name = strings.TrimPrefix(name, "www-tablatures-tk @ ")
-	name = strings.ReplaceAll(name, "_", " ")
-	name = JunkBracket.ReplaceAllString(name, "")
-	name = reVersionTag.ReplaceAllString(name, "")
+	name = StripTags(BareName(name))
 	name = reVerSuffix.ReplaceAllString(name, "")
 	name = reIDSuffix.ReplaceAllString(name, "")
-	name = strings.TrimSpace(reSpaces.ReplaceAllString(name, " "))
+	name = strings.Join(strings.Fields(name), " ")
 
 	for _, a := range artists {
 		a = strings.TrimSpace(a)
@@ -87,14 +41,25 @@ func titleFromFilename(name string, artists ...string) string {
 			}
 		}
 	}
-	if i := strings.Index(name, " - "); i > 0 {
-		name = strings.TrimSpace(name[i+3:]) // "Other Artist - Title"
-	}
+	name = CutArtistPrefix(name)
 	if r, _ := utf8.DecodeRuneInString(name); unicode.IsLower(r) {
-		name = titleCase(name) // snake_case file names
+		name = TitleCase(name) // snake_case file names
 	}
 	return name
 }
+
+// CutArtistPrefix drops a leading "Other Artist - " from a file name's title part,
+// unless what follows is a variant of the song ("Nectar - Acoustic Version").
+func CutArtistPrefix(name string) string {
+	before, after, ok := strings.Cut(name, " - ")
+	if !ok || before == "" || IsVariant(after) {
+		return name
+	}
+	return strings.TrimSpace(after)
+}
+
+// IsVariant reports whether a title part names a variant of a song ("Acoustic Version", "Live").
+func IsVariant(part string) bool { return reVariant.MatchString(strings.TrimSpace(part)) }
 
 // cutPrefixFold is strings.CutPrefix ignoring case. It matches rune by rune on
 // the original string, since lower-casing can change byte lengths (invalid
@@ -114,7 +79,26 @@ func cutPrefixFold(s, prefix string) (string, bool) {
 	return s, true
 }
 
-func titleCase(s string) string {
+// BareName is a file name without its extensions (wrappers like ".gp5.zip" included) and
+// download noise, with underscores as spaces: "www-example-tk @ my_song.gp5.zip" is "my song".
+func BareName(name string) string {
+	for _, ext := range []string{".crdownload", ".zip"} {
+		name = strings.TrimSuffix(name, ext)
+	}
+	name = strings.TrimSuffix(name, filepath.Ext(name))
+	name = reSiteTag.ReplaceAllString(name, "")
+	return strings.ReplaceAll(name, "_", " ")
+}
+
+// StripTags drops credits ("(Tabbed By X)", "[by x@y.com]") and version tags ("(ver 2)",
+// "(Pro)") from a title.
+func StripTags(s string) string {
+	s = reJunkBracket.ReplaceAllString(s, "")
+	return strings.TrimSpace(reVersionTag.ReplaceAllString(s, ""))
+}
+
+// TitleCase upper-cases the first letter of every word.
+func TitleCase(s string) string {
 	words := strings.Fields(s)
 	for i, w := range words {
 		r, n := utf8.DecodeRuneInString(w)

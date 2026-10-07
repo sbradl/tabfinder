@@ -5,10 +5,10 @@
 package tab
 
 import (
-	"fmt"
-	"io/fs"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -17,9 +17,42 @@ type Track struct {
 	Name       string `json:"name"`
 	Instrument string `json:"instrument,omitempty"`
 	Drums      bool   `json:"drums,omitempty"`
-	Pitches    []int  `json:"pitches,omitempty"` // MIDI notes, lowest string first
-	Tuning     string `json:"tuning,omitempty"`
+	Pitches    []int  `json:"pitches,omitempty"` // MIDI notes, lowest string first; none for drums
 }
+
+// Tuning is the tuning of the track's strings; the zero Tuning for drums.
+func (t Track) Tuning() Tuning { return TuningOf(t.Pitches) }
+
+// MarshalJSON adds the tuning, "Drop C (C G C F A D)", for people reading tabscan -json.
+// Decoding ignores it: the pitches say it all.
+func (t Track) MarshalJSON() ([]byte, error) {
+	type plain Track
+	return json.Marshal(struct {
+		plain
+		Tuning string `json:"tuning,omitempty"`
+	}{plain(t), t.Tuning().String()})
+}
+
+// Format is a tab file's real format, read from its content; the extension may say otherwise.
+type Format string
+
+const (
+	FormatGP3 Format = "gp3" // Guitar Pro 3
+	FormatGP4 Format = "gp4"
+	FormatGP5 Format = "gp5"
+	FormatGP6 Format = "gp6" // .gpx
+	FormatGP7 Format = "gp7" // .gp, Guitar Pro 7 and later
+	FormatTG  Format = "tg"  // TuxGuitar 1 and 2
+	FormatPTB Format = "ptb" // Power Tab
+)
+
+// Source says where a song's artist, album or title came from.
+type Source string
+
+const (
+	FromFile Source = "file" // the file's own metadata
+	FromPath Source = "path" // its folder or file name
+)
 
 // Tempo is a tempo (in the score's own beat unit, usually quarter notes)
 // that takes effect at a 1-based bar.
@@ -29,14 +62,14 @@ type Tempo struct {
 }
 
 type Song struct {
-	Path         string  `json:"path"` // relative to the scan root
-	Format       string  `json:"format"`
+	Path         string  `json:"path"`   // relative to the scan root
+	Format       Format  `json:"format"` // empty if unreadable
 	Artist       string  `json:"artist"`
 	Album        string  `json:"album"`
 	Title        string  `json:"title"`
-	ArtistSource string  `json:"artistSource"` // "file" or "path"
-	AlbumSource  string  `json:"albumSource"`
-	TitleSource  string  `json:"titleSource"`
+	ArtistSource Source  `json:"artistSource"`
+	AlbumSource  Source  `json:"albumSource"`
+	TitleSource  Source  `json:"titleSource"`
 	Tracks       []Track `json:"tracks,omitempty"`
 	Tempos       []Tempo `json:"tempos,omitempty"` // initial tempo first, then changes
 	Error        string  `json:"error,omitempty"`
@@ -50,15 +83,22 @@ func (s *Song) addTempo(bar int, bpm float64) {
 	s.Tempos = append(s.Tempos, Tempo{Bar: bar, BPM: bpm})
 }
 
-// TempoSummary lists the distinct tempos in order of first appearance.
+// DistinctBPMs lists the tempos the song uses, each once, in order of first appearance.
+func (s *Song) DistinctBPMs() []float64 {
+	var out []float64
+	for _, t := range s.Tempos {
+		if !slices.Contains(out, t.BPM) {
+			out = append(out, t.BPM)
+		}
+	}
+	return out
+}
+
+// TempoSummary lists the distinct tempos in order of first appearance: "190, 145".
 func (s *Song) TempoSummary() string {
 	var out []string
-	seen := map[float64]bool{}
-	for _, t := range s.Tempos {
-		if !seen[t.BPM] {
-			seen[t.BPM] = true
-			out = append(out, strconv.FormatFloat(t.BPM, 'f', -1, 64))
-		}
+	for _, bpm := range s.DistinctBPMs() {
+		out = append(out, strconv.FormatFloat(bpm, 'f', -1, 64))
 	}
 	return strings.Join(out, ", ")
 }
@@ -81,8 +121,10 @@ var tabExts = map[string]bool{
 func IsTabFile(name string) bool { return tabExts[strings.ToLower(filepath.Ext(name))] }
 
 // Walk scans arg (a directory, walked recursively, or a single file) and
-// calls fn for every tab file. Paths in the results are relative to root;
-// an empty root means arg itself (or a file argument's directory).
+// calls fn for every tab file, in walk order. Paths in the results are relative
+// to root; an empty root means arg itself (or a file argument's directory).
+// Like ScanAll, it stops at the first unreadable directory and returns its
+// error after the songs found before it.
 func Walk(arg, root string, fn func(*Song)) error {
 	st, err := os.Stat(arg)
 	if err != nil {
@@ -98,15 +140,11 @@ func Walk(arg, root string, fn func(*Song)) error {
 		fn(Scan(arg, root))
 		return nil
 	}
-	return filepath.WalkDir(arg, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return fmt.Errorf("%s: %w", path, err)
-		}
-		if !d.IsDir() && IsTabFile(path) {
-			fn(Scan(path, root))
-		}
-		return nil
-	})
+	songs, err := scanTree(arg, root)
+	for _, s := range songs {
+		fn(s)
+	}
+	return err
 }
 
 // Scan parses one file. It always returns a Song; parse problems are
@@ -135,21 +173,21 @@ func applyFallbacks(s *Song, rel string) {
 	if d := filepath.Dir(rel); d != "." {
 		dirs = strings.Split(d, "/")
 	}
-	s.ArtistSource, s.AlbumSource, s.TitleSource = "file", "file", "file"
+	s.ArtistSource, s.AlbumSource, s.TitleSource = FromFile, FromFile, FromFile
 	if s.Artist == "" {
-		s.ArtistSource = "path"
+		s.ArtistSource = FromPath
 		if len(dirs) >= 1 {
 			s.Artist = dirs[0]
 		}
 	}
 	if s.Album == "" {
-		s.AlbumSource = "path"
+		s.AlbumSource = FromPath
 		if len(dirs) >= 2 {
 			s.Album = dirs[1]
 		}
 	}
 	if s.Title == "" {
-		s.TitleSource = "path"
+		s.TitleSource = FromPath
 		dirArtist := ""
 		if len(dirs) >= 1 {
 			dirArtist = dirs[0]

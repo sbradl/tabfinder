@@ -8,11 +8,11 @@ import (
 )
 
 var (
-	dropC6 = tab.Track{Pitches: []int{36, 43, 48, 53, 57, 62}, Tuning: "Drop C (C G C F A D)"}
-	dropC4 = tab.Track{Pitches: []int{24, 31, 36, 41}, Tuning: "Drop C (C G C F)"}
-	eStd6  = tab.Track{Pitches: []int{40, 45, 50, 55, 59, 64}, Tuning: "E Standard (E A D G B E)"}
-	bStd7  = tab.Track{Pitches: []int{35, 40, 45, 50, 55, 59, 64}, Tuning: "B Standard (B E A D G B E)"}
-	custom = tab.Track{Pitches: []int{35, 40, 45, 50, 55, 59}, Tuning: "Custom (B E A D G B)"}
+	dropC6 = tab.Track{Pitches: []int{36, 43, 48, 53, 57, 62}}
+	dropC4 = tab.Track{Pitches: []int{24, 31, 36, 41}}
+	eStd6  = tab.Track{Pitches: []int{40, 45, 50, 55, 59, 64}}
+	bStd7  = tab.Track{Pitches: []int{35, 40, 45, 50, 55, 59, 64}}
+	custom = tab.Track{Pitches: []int{35, 40, 45, 50, 55, 59}}
 )
 
 func library() *Library {
@@ -37,9 +37,6 @@ func TestEntries(t *testing.T) {
 	soilbed_quartet := l.Entries[4]
 	if want := []Tuning{{6, "Drop C", "C G C F A D"}, {4, "Drop C", "C G C F"}}; !slices.Equal(soilbed_quartet.Tunings, want) {
 		t.Errorf("tunings = %v, want %v", soilbed_quartet.Tunings, want)
-	}
-	if want := []string{"190", "145"}; !slices.Equal(soilbed_quartet.BPMs, want) {
-		t.Errorf("bpms = %v, want %v", soilbed_quartet.BPMs, want)
 	}
 	if got := l.Entries[0].Tunings[1].Label(); got != "B E A D G B" {
 		t.Errorf("custom label = %q", got)
@@ -88,25 +85,5 @@ func TestSearch(t *testing.T) {
 	}
 	if got := SuggestTunings(want, "b e a"); !slices.Equal(got, []Tuning{want[1], want[3]}) {
 		t.Errorf("SuggestTunings by notes = %v", got)
-	}
-}
-
-func TestTuxGuitarName(t *testing.T) {
-	for _, tt := range []struct {
-		song    tab.Song
-		name    string
-		inPlace bool
-	}{
-		{tab.Song{Path: "a/Brass Kettle.gp5", Format: "gp5", Title: "Brass Kettle"}, "Brass Kettle.gp5", true},
-		{tab.Song{Path: "a/x.gp3", Format: "gp5", Title: "Brass Kettle"}, "Brass Kettle.gp5", false},
-		{tab.Song{Path: "a/x.gpx.crdownload", Format: "gp6", Title: "A.B.C (live)"}, "ABC live.gpx", false},
-		{tab.Song{Path: "a/x.zip", Format: "gp7", Title: "?!"}, "song.gp", false},
-	} {
-		if got := TuxGuitarName(&tt.song); got != tt.name {
-			t.Errorf("TuxGuitarName(%s) = %q, want %q", tt.song.Path, got, tt.name)
-		}
-		if got := OpensInPlace(&tt.song); got != tt.inPlace {
-			t.Errorf("OpensInPlace(%s) = %v", tt.song.Path, got)
-		}
 	}
 }

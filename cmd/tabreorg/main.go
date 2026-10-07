@@ -36,18 +36,19 @@ func main() {
 		path = *configFile
 	}
 	c, err := loadConfig(path, asked)
+	var albums nameRules
 	if err == nil {
-		err = setConfig(c)
+		albums, err = newNameRules(c)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "tabreorg:", err)
 		os.Exit(1)
 	}
-	skipDirs := cfg.Skip
+	skipDirs := c.Skip
 	if skipGiven {
 		skipDirs = splitList(*skip)
 	}
-	if err := run(flag.Arg(0), *apply, *rename, *summary, skipDirs); err != nil {
+	if err := run(flag.Arg(0), *apply, *rename, *summary, skipDirs, albums); err != nil {
 		fmt.Fprintln(os.Stderr, "tabreorg:", err)
 		os.Exit(1)
 	}
@@ -63,7 +64,7 @@ func splitList(s string) []string {
 	return out
 }
 
-func run(rootArg string, apply, rename bool, summary string, skip []string) error {
+func run(rootArg string, apply, rename bool, summary string, skip []string, albums nameRules) error {
 	root, err := filepath.Abs(rootArg)
 	if err != nil {
 		return err
@@ -75,7 +76,7 @@ func run(rootArg string, apply, rename bool, summary string, skip []string) erro
 	if err := tab.Walk(root, root, func(s *tab.Song) { songs = append(songs, s) }); err != nil {
 		return err
 	}
-	p, err := newPlanner(root, skip)
+	p, err := newPlanner(root, skip, albums)
 	if err != nil {
 		return err
 	}

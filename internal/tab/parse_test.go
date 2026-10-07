@@ -14,7 +14,7 @@ func TestParseBytesDispatch(t *testing.T) {
 	tests := []struct {
 		name    string
 		in      []byte
-		format  string // wanted format, or ""
+		format  Format // wanted format, or ""
 		errPart string // wanted error text, or ""
 	}{
 		{"empty", nil, "", "empty file"},
@@ -24,7 +24,7 @@ func TestParseBytesDispatch(t *testing.T) {
 		{"gpx magic", []byte("BCFZ"), "", "gpx"},
 		{"bcfs magic", []byte("BCFS"), "", "gpx"},
 		{"ptab magic", []byte("ptab\x01\x00"), "", "Power Tab 1.0"},
-		{"gp3", tabfiles.GP3(tabfiles.GP3Spec{Title: "T", Artist: "A", Tempo: 120, Tracks: []tabfiles.GP3Track{{Name: "G", Strings: tabfiles.StdGuitar}}}), "gp3", ""},
+		{"gp3", tabfiles.GP(tabfiles.GPSpec{Version: "3.00", Title: "T", Artist: "A", Tempo: 120, Tracks: []tabfiles.GPTrack{{Name: "G", Strings: tabfiles.StdGuitar}}}), "gp3", ""},
 		{"tg", tabfiles.TG1("T", "A", "B"), "tg", ""},
 		{"ptb", tabfiles.PTB(3, "T", "A", &album), "ptb", ""},
 	}
@@ -62,9 +62,9 @@ func TestParseBytesIgnoresExtensionAndOffset(t *testing.T) {
 }
 
 func TestParseGP3Synthetic(t *testing.T) {
-	b := tabfiles.GP3(tabfiles.GP3Spec{
+	b := tabfiles.GP(tabfiles.GPSpec{Version: "3.00",
 		Title: "Brass Kettle", Artist: "Soilbed Quartet", Album: "Glass", Tempo: 190,
-		Tracks: []tabfiles.GP3Track{
+		Tracks: []tabfiles.GPTrack{
 			{Name: "Guitar", Strings: tabfiles.StdGuitar},
 			{Name: "Bass", Strings: []int{43, 38, 33, 28}},
 			{Name: "Drums", Drums: true, Strings: []int{0, 0, 0, 0, 0, 0}},
@@ -81,8 +81,8 @@ func TestParseGP3Synthetic(t *testing.T) {
 		t.Errorf("tempos = %v", s.Tempos)
 	}
 	want := []Track{
-		{Name: "Guitar", Pitches: []int{40, 45, 50, 55, 59, 64}, Tuning: "E Standard (E A D G B E)", Instrument: "Acoustic Grand Piano"},
-		{Name: "Bass", Pitches: []int{28, 33, 38, 43}, Tuning: "E Standard (E A D G)", Instrument: "Acoustic Grand Piano"},
+		{Name: "Guitar", Pitches: []int{40, 45, 50, 55, 59, 64}, Instrument: "Acoustic Grand Piano"},
+		{Name: "Bass", Pitches: []int{28, 33, 38, 43}, Instrument: "Acoustic Grand Piano"},
 		{Name: "Drums", Drums: true, Instrument: "Drums"},
 	}
 	if len(s.Tracks) != len(want) {
@@ -90,7 +90,7 @@ func TestParseGP3Synthetic(t *testing.T) {
 	}
 	for i, w := range want {
 		g := s.Tracks[i]
-		if g.Name != w.Name || g.Drums != w.Drums || g.Tuning != w.Tuning || !slices.Equal(g.Pitches, w.Pitches) {
+		if g.Name != w.Name || g.Drums != w.Drums || g.Tuning().String() != w.Tuning().String() || !slices.Equal(g.Pitches, w.Pitches) {
 			t.Errorf("track %d = %+v, want %+v", i, g, w)
 		}
 	}
@@ -116,7 +116,7 @@ func TestParseZip(t *testing.T) {
 		if want := []Tempo{{1, 120}, {9, 150}}; !slices.Equal(s.Tempos, want) {
 			t.Errorf("tempos = %v", s.Tempos)
 		}
-		if len(s.Tracks) != 1 || s.Tracks[0].Tuning != "E Standard (E A D G B E)" || s.Tracks[0].Instrument != "Electric Guitar" {
+		if len(s.Tracks) != 1 || s.Tracks[0].Tuning().String() != "E Standard (E A D G B E)" || s.Tracks[0].Instrument != "Electric Guitar" {
 			t.Errorf("tracks = %+v", s.Tracks)
 		}
 	})
@@ -131,7 +131,7 @@ func TestParseZip(t *testing.T) {
 		if want := []Tempo{{1, 100}, {3, 130}}; !slices.Equal(s.Tempos, want) {
 			t.Errorf("tempos = %v", s.Tempos)
 		}
-		if len(s.Tracks) != 2 || s.Tracks[0].Tuning != "Drop D (D A D G B E)" || !s.Tracks[1].Drums || s.Tracks[1].Tuning != "" {
+		if len(s.Tracks) != 2 || s.Tracks[0].Tuning().String() != "Drop D (D A D G B E)" || !s.Tracks[1].Drums || s.Tracks[1].Tuning().String() != "" {
 			t.Errorf("tracks = %+v", s.Tracks)
 		}
 	})
@@ -219,7 +219,7 @@ func TestParseGPIFEdgeCases(t *testing.T) {
 	})
 	t.Run("tuning highest first is reversed", func(t *testing.T) {
 		s := parse(tabfiles.GPIF("T", "A", "B", nil, tabfiles.GPIFTrack{Name: "G", Instrument: "Guitar", Pitches: "64 59 55 50 45 38"}))
-		if got := s.Tracks[0]; got.Tuning != "Drop D (D A D G B E)" || !slices.Equal(got.Pitches, []int{38, 45, 50, 55, 59, 64}) {
+		if got := s.Tracks[0]; got.Tuning().String() != "Drop D (D A D G B E)" || !slices.Equal(got.Pitches, []int{38, 45, 50, 55, 59, 64}) {
 			t.Errorf("track = %+v", got)
 		}
 	})
@@ -229,19 +229,19 @@ func TestParseGPIFEdgeCases(t *testing.T) {
 			tabfiles.GPIFTrack{Name: "Weird", Pitches: "38 43 50 55 59 62"},
 			tabfiles.GPIFTrack{Name: "None"},
 		))
-		if got := s.Tracks[0].Tuning; !strings.HasPrefix(got, "Custom (") {
+		if got := s.Tracks[0].Tuning().String(); !strings.HasPrefix(got, "Custom (") {
 			t.Errorf("8 strings = %q", got)
 		}
-		if got := s.Tracks[1].Tuning; got != "Custom (D G D G B D)" {
+		if got := s.Tracks[1].Tuning().String(); got != "Custom (D G D G B D)" {
 			t.Errorf("weird = %q", got)
 		}
-		if s.Tracks[2].Tuning != "" || s.Tracks[2].Pitches != nil {
+		if s.Tracks[2].Tuning().String() != "" || s.Tracks[2].Pitches != nil {
 			t.Errorf("no tuning = %+v", s.Tracks[2])
 		}
 	})
 	t.Run("drum kit", func(t *testing.T) {
 		s := parse(tabfiles.GPIF("T", "A", "B", nil, tabfiles.GPIFTrack{Name: "Kit", Instrument: "Drums", Kind: "drumKit", Pitches: "40 45"}))
-		if got := s.Tracks[0]; !got.Drums || got.Instrument != "Drums" || got.Tuning != "" {
+		if got := s.Tracks[0]; !got.Drums || got.Instrument != "Drums" || got.Tuning().String() != "" {
 			t.Errorf("track = %+v", got)
 		}
 	})
@@ -425,9 +425,9 @@ func TestDecodeText(t *testing.T) {
 // Every cut of a file must give an error or a song, never a panic, and
 // a cut after the header keeps what was read before it.
 func TestTruncatedGP3(t *testing.T) {
-	full := tabfiles.GP3(tabfiles.GP3Spec{
+	full := tabfiles.GP(tabfiles.GPSpec{Version: "3.00",
 		Title: "Brass Kettle", Artist: "Soilbed Quartet", Album: "Glass", Tempo: 190,
-		Tracks: []tabfiles.GP3Track{{Name: "Guitar", Strings: tabfiles.StdGuitar}, {Name: "Bass", Strings: []int{43, 38, 33, 28}}},
+		Tracks: []tabfiles.GPTrack{{Name: "Guitar", Strings: tabfiles.StdGuitar}, {Name: "Bass", Strings: []int{43, 38, 33, 28}}},
 	})
 	if _, err := parseBytes(full); err != nil {
 		t.Fatal(err)
@@ -448,7 +448,7 @@ func TestTruncatedFormats(t *testing.T) {
 	album := "Alb"
 	gpifXML := tabfiles.GPIF("T", "A", "B", [][2]float64{{0, 120}}, tabfiles.GPIFTrack{Name: "G", Pitches: "40 45 50 55 59 64"})
 	inputs := map[string][]byte{
-		"gp3": tabfiles.GP3(tabfiles.GP3Spec{Title: "T", Artist: "A", Tempo: 120, Tracks: []tabfiles.GP3Track{{Name: "G", Strings: tabfiles.StdGuitar}}}),
+		"gp3": tabfiles.GP(tabfiles.GPSpec{Version: "3.00", Title: "T", Artist: "A", Tempo: 120, Tracks: []tabfiles.GPTrack{{Name: "G", Strings: tabfiles.StdGuitar}}}),
 		"tg":  tabfiles.TG1("T", "A", "B"),
 		"ptb": tabfiles.PTB(3, "T", "A", &album),
 		"gp7": tabfiles.Zip(map[string][]byte{"Content/score.gpif": gpifXML}),
@@ -471,7 +471,7 @@ func TestTruncatedFormats(t *testing.T) {
 
 func FuzzParseBytes(f *testing.F) {
 	album := "Alb"
-	f.Add(tabfiles.GP3(tabfiles.GP3Spec{Title: "T", Artist: "A", Tempo: 120, Tracks: []tabfiles.GP3Track{{Name: "G", Strings: tabfiles.StdGuitar}}}))
+	f.Add(tabfiles.GP(tabfiles.GPSpec{Version: "3.00", Title: "T", Artist: "A", Tempo: 120, Tracks: []tabfiles.GPTrack{{Name: "G", Strings: tabfiles.StdGuitar}}}))
 	f.Add(tabfiles.TG1("T", "A", "B"))
 	f.Add(tabfiles.PTB(3, "T", "A", &album))
 	f.Add(tabfiles.Zip(map[string][]byte{"Content/score.gpif": tabfiles.GPIF("T", "A", "B", [][2]float64{{0, 120}}, tabfiles.GPIFTrack{Name: "G", Pitches: "40 45 50 55 59 64"})}))

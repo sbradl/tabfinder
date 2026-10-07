@@ -46,7 +46,7 @@ type harnessOpts struct {
 	noIndex  bool              // no cached index at all
 	root     *string           // folder in config.json; nil: /tabs/Tabs
 	noConfig bool              // no config.json
-	legacy   string            // content of a settings.properties
+	config   string            // content of config.json, instead of one with root in it
 	tools    map[string]string // fake programs, the only ones on PATH (see fakeTools); nil: just a gsettings that says dark
 	size     image.Point       // window size in dp; zero: 1000 x 900
 	waitLoad bool              // false: don't wait for the index to be loaded
@@ -55,27 +55,27 @@ type harnessOpts struct {
 func str(s string) *string { return &s }
 
 func newHarnessWith(t *testing.T, o harnessOpts) *harness {
-	configDir, cacheDir := isolate(t)
-	os.MkdirAll(cacheDir, 0o755)
+	d := isolate(t)
+	os.MkdirAll(d.cache, 0o755)
 	switch {
 	case o.noIndex:
 	case o.index != nil:
-		os.WriteFile(indexFile, []byte(*o.index), 0o644)
+		os.WriteFile(d.index(), []byte(*o.index), 0o644)
 	default:
-		os.WriteFile(indexFile, []byte(sampleIndex), 0o644)
+		os.WriteFile(d.index(), []byte(sampleIndex), 0o644)
 	}
 	if !o.noConfig {
 		root := "/tabs/Tabs"
 		if o.root != nil {
 			root = *o.root
 		}
-		if err := saveRoot(root); err != nil {
+		if err := d.saveRoot(root); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if o.legacy != "" {
-		os.MkdirAll(configDir, 0o755)
-		os.WriteFile(filepath.Join(configDir, "settings.properties"), []byte(o.legacy), 0o644)
+	if o.config != "" {
+		os.MkdirAll(d.config, 0o755)
+		os.WriteFile(filepath.Join(d.config, "config.json"), []byte(o.config), 0o644)
 	}
 	if o.tools == nil {
 		o.tools = map[string]string{"gsettings": `printf "'prefer-dark'\n"`}
@@ -86,14 +86,14 @@ func newHarnessWith(t *testing.T, o harnessOpts) *harness {
 	}
 	h := &harness{t: t, toolDir: dir, size: image.Pt(o.size.X*scale, o.size.Y*scale), now: time.Unix(0, 0), shots: os.Getenv("TABFINDER_SHOTS")}
 	// A clock the test owns: the snackbar expires when the harness's time passes, not the wall clock's.
-	oldNow, oldAfter := now, afterFunc
-	now = func() time.Time { return h.now }
-	afterFunc = func(d time.Duration, f func()) *time.Timer {
-		h.timers = append(h.timers, d)
-		return time.NewTimer(time.Hour)
+	c := clock{
+		now: func() time.Time { return h.now },
+		afterFunc: func(d time.Duration, f func()) *time.Timer {
+			h.timers = append(h.timers, d)
+			return time.NewTimer(time.Hour)
+		},
 	}
-	t.Cleanup(func() { now, afterFunc = oldNow, oldAfter })
-	h.u = newUI(func() {})
+	h.u = newUI(func() {}, d, c)
 	if !o.waitLoad {
 		for i := 0; i < 100 && !h.u.loaded; i++ {
 			time.Sleep(10 * time.Millisecond)
@@ -119,6 +119,7 @@ func (h *harness) frame() {
 	}
 	h.u.layout(gtx)
 	h.r.Frame(&h.ops)
+	h.u.opens.Wait() // a song being opened: its outcome comes in with the next frame
 	h.now = h.now.Add(16 * time.Millisecond)
 }
 

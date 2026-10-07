@@ -41,7 +41,7 @@ func isTuxGuitar(b []byte) bool {
 func parseTG(b []byte) (*Song, error) {
 	pos := 0
 	tgString(b, &pos) // format header
-	s := &Song{Format: "tg"}
+	s := &Song{Format: FormatTG}
 	var ok1, ok2, ok3 bool
 	s.Title, ok1 = tgString(b, &pos)
 	s.Artist, ok2 = tgString(b, &pos)
@@ -57,7 +57,7 @@ func parsePTB(b []byte) (*Song, error) {
 	if version := r.u16(); version < 3 {
 		return nil, errors.New("Power Tab 1.0 files are not supported")
 	}
-	s := &Song{Format: "ptb"}
+	s := &Song{Format: FormatPTB}
 	if fileType := r.u16(); fileType != 0 {
 		return s, nil // lesson file, no song header
 	}
@@ -123,7 +123,7 @@ func parseTG2(data []byte) (*Song, error) {
 		return nil, err
 	}
 	s := &Song{
-		Format: "tg",
+		Format: FormatTG,
 		Title:  strings.TrimSpace(doc.Song.Name),
 		Artist: strings.TrimSpace(doc.Song.Artist),
 		Album:  strings.TrimSpace(doc.Song.Album),
@@ -146,7 +146,6 @@ func parseTG2(data []byte) (*Song, error) {
 		} else {
 			t.Pitches = slices.Clone(tt.Strings) // stored highest string first
 			slices.Reverse(t.Pitches)
-			t.Tuning = tuningName(t.Pitches)
 		}
 		s.Tracks = append(s.Tracks, t)
 	}

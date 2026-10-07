@@ -17,7 +17,7 @@ func readGPMeasures(r *reader, major, minor, measures int, stringCounts []int, s
 				if r.err != nil {
 					return r.err
 				}
-				if beats < 0 || beats > 512 {
+				if beats < 0 || beats > maxBeats {
 					return fmt.Errorf("bar %d, track %d: implausible beat count %d", m+1, t+1, beats)
 				}
 				for i := 0; i < beats; i++ {
@@ -25,7 +25,7 @@ func readGPMeasures(r *reader, major, minor, measures int, stringCounts []int, s
 					if r.err != nil {
 						return r.err
 					}
-					if tempo > 1000 {
+					if tempo > maxTempo {
 						return fmt.Errorf("bar %d, track %d: implausible tempo %d", m+1, t+1, tempo)
 					}
 					if tempo > 0 {
@@ -233,7 +233,7 @@ func skipGPNoteEffects(r *reader, major int) {
 func skipGPBend(r *reader) {
 	r.skip(1 + 4) // type, value
 	points := r.i32()
-	if points < 0 || points > 100 {
+	if points < 0 || points > maxBendPts {
 		r.err = fmt.Errorf("implausible bend point count %d at offset %d", points, r.pos)
 		return
 	}

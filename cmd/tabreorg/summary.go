@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"tabfinder/internal/tab"
 )
 
 // writeSummary writes the markdown report: files without album, songs
@@ -27,27 +29,18 @@ func writeSummary(file, root string, p *planner, places []*placement, ms []move,
 	w("# Tab reorganization summary (%s)", time.Now().Format("2006-01-02"))
 	w("")
 	w("Root: `%s` · %d tab files scanned · %s", root, len(places), status)
-	w("")
-	var skip []string
-	for _, d := range p.skip {
-		skip = append(skip, "`"+d+"`")
+	if len(p.skip) > 0 {
+		var skip []string
+		for _, d := range p.skip {
+			skip = append(skip, "`"+d+"`")
+		}
+		w("")
+		w("Left untouched by request: %s.", strings.Join(skip, ", "))
 	}
-	w("Left untouched by request: %s.", strings.Join(skip, ", "))
 
 	inSkipped := func(final string) bool { return p.skipped(final) && strings.Contains(final, "/") }
 
-	// Files without album.
-	noAlbum := map[string][]string{}
-	for _, pl := range places {
-		parts := strings.Split(pl.final, "/")
-		if len(parts) <= 2 && !inSkipped(pl.final) {
-			artist := "(root)"
-			if len(parts) == 2 {
-				artist = parts[0]
-			}
-			noAlbum[artist] = append(noAlbum[artist], parts[len(parts)-1])
-		}
-	}
+	noAlbum := withoutAlbum(places, inSkipped)
 	total := 0
 	var artists []string
 	for a, files := range noAlbum {
@@ -93,80 +86,13 @@ func writeSummary(file, root string, p *planner, places []*placement, ms []move,
 	}
 
 	// Songs with several tabs.
-	hashOf := map[*placement]string{}
-	for _, pl := range places {
-		rel := pl.song.Path
-		if applied {
-			rel = pl.final
-		}
-		h, err := md5File(filepath.Join(root, filepath.FromSlash(rel)))
-		if err != nil {
-			return err
-		}
-		hashOf[pl] = h
+	hashOf, err := hashFiles(root, places, applied)
+	if err != nil {
+		return err
 	}
-	parent := map[*placement]*placement{}
-	var find func(x *placement) *placement
-	find = func(x *placement) *placement {
-		for parent[x] != nil && parent[x] != x {
-			x = parent[x]
-		}
-		return x
-	}
-	union := func(g []*placement) {
-		for _, pl := range g[1:] {
-			parent[find(pl)] = find(g[0])
-		}
-	}
-	bySong := map[[2]string][]*placement{}
-	var songOrder [][2]string
-	byHash := map[string][]*placement{}
-	var hashOrder []string
-	for _, pl := range places {
-		if _, ok := byHash[hashOf[pl]]; !ok {
-			hashOrder = append(hashOrder, hashOf[pl])
-		}
-		byHash[hashOf[pl]] = append(byHash[hashOf[pl]], pl)
-		k := songKey(pl.song)
-		if k == "" || k == "untitled" || k == "track1" {
-			continue
-		}
-		artist := ""
-		if i := strings.IndexByte(pl.final, '/'); i > 0 {
-			artist = pl.final[:i]
-		}
-		if pl.song.ArtistSource == "file" && !reJunkArtist.MatchString(pl.song.Artist) && (inSkipped(pl.final) || artist == "") {
-			artist = pl.song.Artist
-		}
-		g := [2]string{key(artist), k}
-		if _, ok := bySong[g]; !ok {
-			songOrder = append(songOrder, g)
-		}
-		bySong[g] = append(bySong[g], pl)
-	}
-	for _, g := range songOrder {
-		union(bySong[g])
-	}
-	for _, h := range hashOrder {
-		union(byHash[h])
-	}
-	groups := map[*placement][]*placement{}
-	var groupOrder []*placement
-	for _, pl := range places {
-		r := find(pl)
-		if _, ok := groups[r]; !ok {
-			groupOrder = append(groupOrder, r)
-		}
-		groups[r] = append(groups[r], pl)
-	}
-	var dups [][]*placement
+	dups := duplicates(places, hashOf, inSkipped, p.rules)
 	identical, files := 0, 0
-	for _, r := range groupOrder {
-		g := groups[r]
-		if len(g) < 2 {
-			continue
-		}
-		dups = append(dups, g)
+	for _, g := range dups {
 		files += len(g)
 		seen := map[string]bool{}
 		for _, pl := range g {
@@ -177,7 +103,6 @@ func writeSummary(file, root string, p *planner, places []*placement, ms []move,
 		}
 	}
 	lower := func(pl *placement) string { return strings.ToLower(pl.final) }
-	slices.SortStableFunc(dups, func(a, b []*placement) int { return strings.Compare(lower(a[0]), lower(b[0])) })
 
 	w("")
 	w("## Duplicate songs (%d songs, %d files)", len(dups), files)
@@ -188,7 +113,7 @@ func writeSummary(file, root string, p *planner, places []*placement, ms []move,
 		slices.SortStableFunc(g, func(a, b *placement) int { return strings.Compare(lower(a), lower(b)) })
 		var titles []string
 		for _, pl := range g {
-			if pl.song.TitleSource == "file" && songKey(pl.song) == songKey(g[0].song) {
+			if pl.song.TitleSource == tab.FromFile && p.rules.songKey(pl.song) == p.rules.songKey(g[0].song) {
 				titles = append(titles, pl.song.Title)
 			}
 		}
@@ -211,11 +136,7 @@ func writeSummary(file, root string, p *planner, places []*placement, ms []move,
 		w("| File | Format | Size | Tracks | Main tuning | Note |")
 		w("|---|---|---|---|---|---|")
 		for _, pl := range g {
-			rel := pl.song.Path
-			if applied {
-				rel = pl.final
-			}
-			st, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel)))
+			st, err := os.Stat(currentPath(root, pl, applied))
 			if err != nil {
 				return err
 			}
@@ -243,10 +164,10 @@ func mainTuning(pl *placement) string {
 	count := map[string]int{}
 	var order []string
 	for _, t := range pl.song.Tracks {
-		if t.Tuning == "" {
+		if len(t.Pitches) == 0 {
 			continue
 		}
-		label, _, _ := strings.Cut(t.Tuning, " (")
+		label := t.Tuning().Name
 		if count[label] == 0 {
 			order = append(order, label)
 		}
@@ -259,6 +180,32 @@ func mainTuning(pl *placement) string {
 		}
 	}
 	return best
+}
+
+// withoutAlbum lists the file names of the tabs that end up outside an album folder, by
+// artist folder ("(root)" for the root), leaving out the folders left untouched.
+func withoutAlbum(places []*placement, inSkipped func(final string) bool) map[string][]string {
+	noAlbum := map[string][]string{}
+	for _, pl := range places {
+		parts := strings.Split(pl.final, "/")
+		if len(parts) <= 2 && !inSkipped(pl.final) {
+			artist := "(root)"
+			if len(parts) == 2 {
+				artist = parts[0]
+			}
+			noAlbum[artist] = append(noAlbum[artist], parts[len(parts)-1])
+		}
+	}
+	return noAlbum
+}
+
+// currentPath is where pl's file is now: at its final path once the moves are applied.
+func currentPath(root string, pl *placement, applied bool) string {
+	rel := pl.song.Path
+	if applied {
+		rel = pl.final
+	}
+	return filepath.Join(root, filepath.FromSlash(rel))
 }
 
 func md5File(name string) (string, error) {

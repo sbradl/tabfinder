@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"tabfinder/internal/finder"
+	"tabfinder/internal/rows"
 	"tabfinder/internal/tab"
 	"tabfinder/internal/testlib"
 )
@@ -218,7 +219,7 @@ func TestServeRequests(t *testing.T) {
 			t.Errorf("%d responses before the end", n)
 		}
 	})
-	t.Run("matches index the latest load or scan", func(t *testing.T) {
+	t.Run("matches are paths in the latest load or scan", func(t *testing.T) {
 		other := filepath.Join(dir, "other.jsonl")
 		testlib.WriteIndex(t, other, []*tab.Song{{Path: "z", Artist: "Zed", Title: "Only"}})
 		r := session(t,
@@ -233,7 +234,7 @@ func TestServeRequests(t *testing.T) {
 		if got := list(t, r[1], "matches"); len(got) != 0 {
 			t.Errorf("zed in the first library: %v", got)
 		}
-		if got := list(t, r[3], "matches"); len(got) != 1 || got[0] != float64(0) {
+		if got := list(t, r[3], "matches"); len(got) != 1 || got[0] != "z" {
 			t.Errorf("zed in the second: %v", got)
 		}
 		if got := list(t, r[4], "matches"); len(got) != 0 {
@@ -242,10 +243,13 @@ func TestServeRequests(t *testing.T) {
 		if got := list(t, r[6], "matches"); len(got) != 3 {
 			t.Errorf("soilbed quartet after the scan: %v", got)
 		}
-		// The indices point into the songs list of that scan.
-		songs := list(t, r[5], "songs")
+		// The paths are those of songs in that scan.
+		artistOf := map[any]any{}
+		for _, s := range list(t, r[5], "songs") {
+			artistOf[s.(map[string]any)["path"]] = s.(map[string]any)["artist"]
+		}
 		for _, m := range list(t, r[6], "matches") {
-			if a := songs[int(m.(float64))].(map[string]any)["artist"]; a != "Soilbed Quartet" {
+			if a := artistOf[m]; a != "Soilbed Quartet" {
 				t.Errorf("match %v is %v", m, a)
 			}
 		}
@@ -344,10 +348,10 @@ func TestSongOut(t *testing.T) {
 		{Path: "d.gp5", Format: "gp5", Title: "Drums", Tracks: []tab.Track{testlib.Drums}},
 		{Path: "e.gpx.crdownload", Format: "gp6", Title: "Half: Down?"},
 		{Path: "f.gp5", Format: "gp5", Title: "Custom", Tracks: []tab.Track{testlib.Custom6, testlib.DropC6}},
-		{Path: "g.gp5", Format: "gp5", Title: "Odd", Error: "x", Tracks: []tab.Track{{Name: "T", Tuning: "Custom"}}},
+		{Path: "g.gp5", Format: "gp5", Title: "Odd", Error: "x", Tracks: []tab.Track{{Name: "T", Pitches: testlib.Custom6.Pitches}}},
 	})
-	got := map[string]songOut{}
-	for _, s := range songsOut(lib) {
+	got := map[string]rows.Song{}
+	for _, s := range rows.All(lib) {
 		got[s.Title] = s
 	}
 	for title, want := range map[string]bool{"Broken": true, "Partial": false, "NoTunings": false, "Drums": false, "Half: Down?": false, "Odd": false} {
@@ -368,10 +372,6 @@ func TestSongOut(t *testing.T) {
 	}
 	if !slices.Equal(labels, []string{"D G D G B D", "Drop C"}) || !slices.Equal(details, []string{"", "C G C F A D"}) {
 		t.Errorf("labels %q details %q", labels, details)
-	}
-	// Notes missing: the label stays "Custom" and so does no detail.
-	if tu := got["Odd"].Tunings[0]; tu.Label != "Custom" || tu.Detail != "" || tu.Notes != "" {
-		t.Errorf("odd tuning = %+v", tu)
 	}
 	// JSON field names, which the Android app decodes.
 	b, _ := json.Marshal(got["Custom"].Tunings[1])

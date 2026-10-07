@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"tabfinder/internal/finder"
 	"tabfinder/internal/tab"
 )
 
@@ -17,7 +18,7 @@ func main() {
 	jsonOut := flag.Bool("json", false, "emit one JSON object per file (with per-track details) instead of TSV")
 	serveApp := flag.Bool("serve", false, "answer the TabFinder app's requests on stdin/stdout instead (JSON lines, see serve.go)")
 	root := flag.String("root", "", "base directory for the Artist/Album fallback (default: the directory argument, or a file argument's parent)")
-	var f tab.Filter
+	var f finder.Filter
 	flag.StringVar(&f.Name, "name", "", "only songs whose title or file name contains all these words")
 	flag.StringVar(&f.Artist, "artist", "", "only songs whose artist contains this text")
 	flag.StringVar(&f.Tuning, "tuning", "", `only songs with a track in this tuning, by name or notes: "drop c", "eb standard", "D A D G A D"`)
@@ -35,12 +36,12 @@ func main() {
 		return
 	}
 	if *bpm != "" {
-		var err error
-		if f.BPMMin, f.BPMMax, err = tab.ParseBPMRange(*bpm); err != nil {
+		r, err := finder.ParseBPMRange(*bpm)
+		if err != nil {
 			fmt.Fprintln(os.Stderr, "tabscan:", err)
 			os.Exit(2)
 		}
-		f.BPMSet = true
+		f.BPM = &r
 	}
 	args := flag.Args()
 	if len(args) == 0 {
@@ -95,10 +96,10 @@ func tsvWriter(w *bufio.Writer) func(*tab.Song) {
 				name += " [" + t.Instrument + "]"
 			}
 			instr = append(instr, name)
-			if t.Tuning == "" {
+			if tu := t.Tuning().String(); tu == "" {
 				tun = append(tun, "-")
 			} else {
-				tun = append(tun, t.Tuning)
+				tun = append(tun, tu)
 			}
 		}
 		fields := []string{s.Path, s.Artist, s.Album, s.Title, s.TempoSummary(), strings.Join(instr, "; "), strings.Join(tun, "; ")}

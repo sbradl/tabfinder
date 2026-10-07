@@ -52,7 +52,7 @@ func parseZip(b []byte) (*Song, error) {
 			if err != nil {
 				return nil, err
 			}
-			return parseGPIF(data, "gp7")
+			return parseGPIF(data, FormatGP7)
 		}
 	}
 	for _, f := range zr.File {

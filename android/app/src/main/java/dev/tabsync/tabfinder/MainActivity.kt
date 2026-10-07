@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
   }
 }
 
-/** The shared screen with Android's file permission, folder picker and TuxGuitar intent. */
+/** The main screen with Android's file permission, folder picker and TuxGuitar intent. */
 @Composable
 private fun AndroidMainScreen() {
   val context = LocalContext.current

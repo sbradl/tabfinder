@@ -12,19 +12,26 @@ import (
 )
 
 // config is what tabreorg knows about one person's library rather than about tabs in
-// general: folders to leave alone, spelling fixes for album names, and album names that
-// are junk. It lives in the user's config directory (see configPath), not in the code.
+// general: folders to leave alone, spelling fixes for album names, names that are junk and
+// the notes its file names end in. It lives in the user's config directory (see
+// configPath), not in the code. Patterns are regular expressions, ignoring case.
 type config struct {
 	Skip         []string          `json:"skip,omitempty"`         // folders, relative to the root, left untouched unless -skip is given
 	AlbumAliases map[string]string `json:"albumAliases,omitempty"` // album name as found (compared via key) -> folder name
-	JunkAlbums   []string          `json:"junkAlbums,omitempty"`   // regular expressions for album names that mean "no album", matched against the whole name, ignoring case
+	JunkAlbums   []string          `json:"junkAlbums,omitempty"`   // album names that mean "no album", matching the whole name
+	JunkArtists  []string          `json:"junkArtists,omitempty"`  // artist names that mean "no artist", matching the whole name
+	FileSuffixes []string          `json:"fileSuffixes,omitempty"` // notes at the end of file names, after a space, _ or -: "withbass" for "song_withbass.gp5"
 }
 
-var (
-	cfg          config
-	aliasesByKey map[string]string
-	reJunkExtra  *regexp.Regexp // from cfg.JunkAlbums; nil for none
-)
+// nameRules is the rules for names, built in and from a config: spelling fixes for albums, names that mean
+// no album or no artist, and the notes file names end in. The zero value has the built-in
+// rules only.
+type nameRules struct {
+	aliases    map[string]string // key(name as found) -> folder name
+	junk       *regexp.Regexp    // from JunkAlbums; nil for none
+	junkArtist *regexp.Regexp    // from JunkArtists; nil for none
+	suffix     *regexp.Regexp    // the built-in tuning suffixes and FileSuffixes
+}
 
 // configPath is $XDG_CONFIG_HOME/tabreorg/config.json, or under ~/.config.
 func configPath() string {
@@ -52,23 +59,45 @@ func loadConfig(path string, asked bool) (config, error) {
 	return c, nil
 }
 
-// setConfig makes c the configuration the name rules use.
-func setConfig(c config) error {
-	var junk *regexp.Regexp
-	if len(c.JunkAlbums) > 0 {
-		parts := make([]string, len(c.JunkAlbums))
-		for i, p := range c.JunkAlbums {
-			parts[i] = "(?:" + p + ")"
-		}
-		var err error
-		if junk, err = regexp.Compile("(?i)^(?:" + strings.Join(parts, "|") + ")$"); err != nil {
-			return fmt.Errorf("junkAlbums: %w", err)
-		}
+// newNameRules adds the rules of c to the built-in ones.
+func newNameRules(c config) (nameRules, error) {
+	r := nameRules{aliases: map[string]string{}}
+	var err error
+	if r.junk, err = wholeName("junkAlbums", c.JunkAlbums); err != nil {
+		return nameRules{}, err
 	}
-	byKey := map[string]string{}
+	if r.junkArtist, err = wholeName("junkArtists", c.JunkArtists); err != nil {
+		return nameRules{}, err
+	}
+	if r.suffix, err = regexp.Compile(`(?i)([ _-](` + strings.Join(append([]string{tuningSuffixes}, c.FileSuffixes...), "|") + `))+$`); err != nil {
+		return nameRules{}, fmt.Errorf("fileSuffixes: %w", err)
+	}
 	for k, v := range c.AlbumAliases {
-		byKey[key(k)] = v
+		r.aliases[key(k)] = v
 	}
-	cfg, aliasesByKey, reJunkExtra = c, byKey, junk
-	return nil
+	return r, nil
 }
+
+// wholeName compiles patterns to one that matches a whole name ignoring case; nil for none.
+func wholeName(field string, patterns []string) (*regexp.Regexp, error) {
+	if len(patterns) == 0 {
+		return nil, nil
+	}
+	parts := make([]string, len(patterns))
+	for i, p := range patterns {
+		parts[i] = "(?:" + p + ")"
+	}
+	re, err := regexp.Compile("(?i)^(?:" + strings.Join(parts, "|") + ")$")
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", field, err)
+	}
+	return re, nil
+}
+
+// junkArtistName reports whether an artist name means "no artist".
+func (r nameRules) junkArtistName(name string) bool {
+	return reJunkArtist.MatchString(name) || (r.junkArtist != nil && r.junkArtist.MatchString(name))
+}
+
+// dropSuffixes drops the tuning and arrangement notes from the end of a file name's title.
+func (r nameRules) dropSuffixes(name string) string { return r.suffix.ReplaceAllString(name, "") }

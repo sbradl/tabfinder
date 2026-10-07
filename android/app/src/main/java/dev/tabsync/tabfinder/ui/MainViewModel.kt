@@ -7,10 +7,13 @@ import dev.tabsync.tabfinder.data.SearchResult
 import dev.tabsync.tabfinder.data.Song
 import dev.tabsync.tabfinder.data.TabSource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -33,17 +36,27 @@ class MainViewModel(private val finder: TabSource) : ViewModel() {
 
   val input = MutableStateFlow(Query())
 
-  /** Null until the saved scan has been read. Each change searches anew, dropping a search still running. */
+  /** The songs by path, which a search's matches name; null until the saved scan has been read. */
+  private val songsByPath: Flow<Map<String, Song>?> =
+    _state
+      .distinctUntilChanged { a, b -> a.loaded == b.loaded && a.songs === b.songs } // not on messages or the scanning flag
+      .map { s -> if (s.loaded) s.songs.associateBy { it.path } else null }
+
+  /**
+   * Null until the saved scan has been read. A new query or new songs search anew, dropping a search
+   * still running. Matches tabscan names that aren't among the songs (it answered for a newer scan
+   * than they are) are left out; the search that follows the new songs fills them in.
+   */
   @OptIn(ExperimentalCoroutinesApi::class)
   val results: StateFlow<Results?> =
-    combine(_state, input) { s, q -> s to q }
-      .mapLatest { (s, q) ->
-        if (!s.loaded) return@mapLatest null
+    combine(songsByPath, input) { songs, q -> songs to q }
+      .mapLatest { (songs, q) ->
+        if (songs == null) return@mapLatest null
         val r = runCatching { finder.search(q) }.getOrElse {
           showMessage("Search failed: ${it.message}")
           SearchResult()
         }
-        Results(r.matches.mapNotNull { s.songs.getOrNull(it) }, r)
+        Results(r.matches.mapNotNull { songs[it] }, r)
       }
       .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -75,7 +88,7 @@ class MainViewModel(private val finder: TabSource) : ViewModel() {
       val result = runCatching { finder.scan() }
       _state.update { s ->
         result.fold(
-          { r -> s.copy(songs = r.songs, scanning = false, message = r.warning ?: "${r.songs.size} tabs, ${r.unreadable} unreadable") },
+          { r -> s.copy(songs = r.songs, scanning = false, message = r.warning ?: r.summary) },
           { e -> s.copy(scanning = false, message = "Scan failed: ${e.message}") },
         )
       }

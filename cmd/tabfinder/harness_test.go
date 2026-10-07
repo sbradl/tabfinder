@@ -118,10 +118,10 @@ func (h *harness) buttonRect(area rect, b *widget.Clickable) rect {
 // rowRect finds the i'th visible song row, scanning down a column.
 func (h *harness) rowRect(i int) rect {
 	h.t.Helper()
-	if len(h.u.rows) <= i {
-		h.t.Fatalf("row %d: only %d rows", i, len(h.u.rows))
+	if len(h.u.result.Matches) <= i {
+		h.t.Fatalf("row %d: only %d rows", i, len(h.u.result.Matches))
 	}
-	r := h.locate(image.Rect(h.winDp().X/2, 120, h.winDp().X/2+1, h.winDp().Y), 6, h.u.rows[i].Hovered)
+	r := h.locate(image.Rect(h.winDp().X/2, 120, h.winDp().X/2+1, h.winDp().Y), 6, h.u.rowClick(i).Hovered)
 	return r
 }
 

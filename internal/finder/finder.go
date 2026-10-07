@@ -7,53 +7,46 @@ package finder
 import (
 	"cmp"
 	"slices"
-	"strconv"
 	"strings"
 
 	"tabfinder/internal/tab"
 )
 
-// Tuning as shown: "Drop C" on a 6-string, with its notes "C G C F A D".
+// Tuning is a tuning as searched and suggested: "Drop C" on a 6-string, with its notes "C G C F A D".
 type Tuning struct {
 	Strings int    `json:"strings"`
 	Name    string `json:"name"`
 	Notes   string `json:"notes"`
 }
 
-// Label is the name, or the notes for a "Custom" tuning, which the name says nothing about.
+// Label is what the tuning is called, in suggestions and in a query: the name, or the notes
+// for a custom tuning, which the name says nothing about.
 func (t Tuning) Label() string {
-	if t.Name == "Custom" && t.Notes != "" {
+	if t.Name == tab.Custom && t.Notes != "" {
 		return t.Notes
 	}
 	return t.Name
 }
 
-// Entry is a song with what its list row shows.
+// Entry is a song with the tunings it is searched and suggested by.
 type Entry struct {
 	Song    *tab.Song
 	Tunings []Tuning // distinct, most strings first (guitars before bass)
-	BPMs    []string // distinct, in order of first appearance
 }
 
 func newEntry(s *tab.Song) Entry {
 	e := Entry{Song: s}
 	for _, t := range s.Tracks {
-		if t.Tuning == "" {
+		if len(t.Pitches) == 0 {
 			continue
 		}
-		name, notes, _ := strings.Cut(t.Tuning, " (")
-		tu := Tuning{len(t.Pitches), name, strings.TrimSuffix(notes, ")")}
+		tt := t.Tuning()
+		tu := Tuning{tt.Strings(), tt.Name, tt.Notes()}
 		if !slices.Contains(e.Tunings, tu) {
 			e.Tunings = append(e.Tunings, tu)
 		}
 	}
 	slices.SortStableFunc(e.Tunings, func(a, b Tuning) int { return b.Strings - a.Strings })
-	for _, t := range s.Tempos {
-		bpm := strconv.FormatFloat(t.BPM, 'f', -1, 64)
-		if !slices.Contains(e.BPMs, bpm) {
-			e.BPMs = append(e.BPMs, bpm)
-		}
-	}
 	return e
 }
 
@@ -93,17 +86,18 @@ func (q Query) Active() bool {
 }
 
 // Filter turns the fields into criteria; an unparsable BPM is left out and reported.
-func (q Query) Filter() (f tab.Filter, bpmInvalid bool) {
-	f = tab.Filter{
+func (q Query) Filter() (f Filter, bpmInvalid bool) {
+	f = Filter{
 		Name:    strings.TrimSpace(q.Name),
 		Artist:  strings.TrimSpace(q.Artist),
 		Tuning:  strings.TrimSpace(q.Tuning),
 		Strings: q.Strings,
 	}
 	if strings.TrimSpace(q.BPM) != "" {
-		var err error
-		f.BPMMin, f.BPMMax, err = tab.ParseBPMRange(q.BPM)
-		f.BPMSet = err == nil
+		r, err := ParseBPMRange(q.BPM)
+		if err == nil {
+			f.BPM = &r
+		}
 		bpmInvalid = err != nil
 	}
 	return f, bpmInvalid
@@ -126,7 +120,7 @@ func (l *Library) Search(q Query) Result {
 	return Result{Matches: l.matching(f), BPMInvalid: invalid, Tunings: l.tuningsOf(l.matching(other))}
 }
 
-func (l *Library) matching(f tab.Filter) []int {
+func (l *Library) matching(f Filter) []int {
 	idx := []int{}
 	for i := range l.Entries {
 		if f.Matches(l.Entries[i].Song) {
@@ -172,11 +166,13 @@ func (l *Library) tuningsOf(idx []int) []Tuning {
 			count[t]++
 		}
 	}
-	group := func(n int) int {
-		if n <= 5 {
-			return n + 100
+	// Guitars (6 strings and up) come first, in string order, then bass (4 and 5).
+	const maxBassStrings = 5
+	group := func(stringCount int) int {
+		if stringCount <= maxBassStrings {
+			return 1000 + stringCount // after any guitar
 		}
-		return n
+		return stringCount
 	}
 	out := make([]Tuning, 0, len(count))
 	for t := range count {

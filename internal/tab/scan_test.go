@@ -26,9 +26,9 @@ func writeFile(t testing.TB, path string, data []byte) {
 func fixtureTree(t testing.TB) string {
 	t.Helper()
 	root := t.TempDir()
-	bare := tabfiles.GP3(tabfiles.GP3Spec{Tempo: 120, Tracks: []tabfiles.GP3Track{{Name: "G", Strings: tabfiles.StdGuitar}}})
-	full := tabfiles.GP3(tabfiles.GP3Spec{Title: "Brass Kettle!", Artist: "Soilbed Quartet Official", Album: "Real Album", Tempo: 190,
-		Tracks: []tabfiles.GP3Track{{Name: "G", Strings: []int{62, 57, 53, 48, 43, 36}}}})
+	bare := tabfiles.GP(tabfiles.GPSpec{Version: "3.00", Tempo: 120, Tracks: []tabfiles.GPTrack{{Name: "G", Strings: tabfiles.StdGuitar}}})
+	full := tabfiles.GP(tabfiles.GPSpec{Version: "3.00", Title: "Brass Kettle!", Artist: "Soilbed Quartet Official", Album: "Real Album", Tempo: 190,
+		Tracks: []tabfiles.GPTrack{{Name: "G", Strings: []int{62, 57, 53, 48, 43, 36}}}})
 	for path, data := range map[string][]byte{
 		"Argyle Moth/Rent of Summer/nectar.gp3":             bare,
 		"Argyle Moth/Gluttonous.gp3":                        bare,
@@ -69,15 +69,15 @@ func TestIsTabFile(t *testing.T) {
 }
 
 func TestScanFallbacks(t *testing.T) {
-	bare := tabfiles.GP3(tabfiles.GP3Spec{Tempo: 120, Tracks: []tabfiles.GP3Track{{Name: "G", Strings: tabfiles.StdGuitar}}})
-	full := tabfiles.GP3(tabfiles.GP3Spec{Title: "Brass Kettle!", Artist: "Soilbed Quartet Official", Album: "Real Album", Tempo: 190,
-		Tracks: []tabfiles.GP3Track{{Name: "G", Strings: tabfiles.StdGuitar}}})
+	bare := tabfiles.GP(tabfiles.GPSpec{Version: "3.00", Tempo: 120, Tracks: []tabfiles.GPTrack{{Name: "G", Strings: tabfiles.StdGuitar}}})
+	full := tabfiles.GP(tabfiles.GPSpec{Version: "3.00", Title: "Brass Kettle!", Artist: "Soilbed Quartet Official", Album: "Real Album", Tempo: 190,
+		Tracks: []tabfiles.GPTrack{{Name: "G", Strings: tabfiles.StdGuitar}}})
 	tests := []struct {
 		name                          string
 		file                          string
 		data                          []byte
 		artist, album, title          string
-		artistSrc, albumSrc, titleSrc string
+		artistSrc, albumSrc, titleSrc Source
 	}{
 		{"artist/album folders", "Argyle Moth/Rent of Summer/nectar.gp3", bare, "Argyle Moth", "Rent of Summer", "Nectar", "path", "path", "path"},
 		{"artist folder only", "Argyle Moth/Gluttonous.gp3", bare, "Argyle Moth", "", "Gluttonous", "path", "path", "path"},
@@ -119,7 +119,7 @@ func TestApplyFallbacksPartialMetadata(t *testing.T) {
 
 func TestScanPath(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "a", "b", "c.gp3"), tabfiles.GP3(tabfiles.GP3Spec{Title: "C", Tracks: []tabfiles.GP3Track{{Name: "G", Strings: tabfiles.StdGuitar}}}))
+	writeFile(t, filepath.Join(root, "a", "b", "c.gp3"), tabfiles.GP(tabfiles.GPSpec{Version: "3.00", Title: "C", Tracks: []tabfiles.GPTrack{{Name: "G", Strings: tabfiles.StdGuitar}}}))
 	s := Scan(filepath.Join(root, "a", "b", "c.gp3"), root)
 	if s.Path != "a/b/c.gp3" || strings.Contains(s.Path, `\`) {
 		t.Errorf("relative path = %q", s.Path)
@@ -258,7 +258,7 @@ func unreadableTree(t *testing.T) (root, locked string) {
 		t.Skip("root can read mode 000 directories")
 	}
 	root = t.TempDir()
-	data := tabfiles.GP3(tabfiles.GP3Spec{Title: "T", Tracks: []tabfiles.GP3Track{{Name: "G", Strings: tabfiles.StdGuitar}}})
+	data := tabfiles.GP(tabfiles.GPSpec{Version: "3.00", Title: "T", Tracks: []tabfiles.GPTrack{{Name: "G", Strings: tabfiles.StdGuitar}}})
 	writeFile(t, filepath.Join(root, "a", "x.gp3"), data)
 	writeFile(t, filepath.Join(root, "c", "y.gp3"), data)
 	locked = filepath.Join(root, "b", "locked")
@@ -340,7 +340,7 @@ func TestScanAll(t *testing.T) {
 	})
 	t.Run("many files", func(t *testing.T) {
 		big := t.TempDir()
-		data := tabfiles.GP3(tabfiles.GP3Spec{Title: "T", Tracks: []tabfiles.GP3Track{{Name: "G", Strings: tabfiles.StdGuitar}}})
+		data := tabfiles.GP(tabfiles.GPSpec{Version: "3.00", Title: "T", Tracks: []tabfiles.GPTrack{{Name: "G", Strings: tabfiles.StdGuitar}}})
 		var want []string
 		for _, a := range []string{"A", "B", "C", "D"} {
 			for i := range 30 {

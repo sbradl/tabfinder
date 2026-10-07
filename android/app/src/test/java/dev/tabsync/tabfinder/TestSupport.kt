@@ -2,6 +2,7 @@ package dev.tabsync.tabfinder
 
 import dev.tabsync.tabfinder.data.Finder
 import dev.tabsync.tabfinder.data.RootStore
+import dev.tabsync.tabfinder.data.Timeouts
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
@@ -36,10 +37,10 @@ fun TemporaryFolder.fakeBinary(script: String): File =
   }
 
 /** A Finder over the host tabscan, with its data in a temp dir. */
-class Backend(folder: TemporaryFolder, binary: File = hostTabscan(), val store: MemoryRootStore = MemoryRootStore()) {
+class Backend(folder: TemporaryFolder, binary: File = hostTabscan(), val store: MemoryRootStore = MemoryRootStore(), timeouts: Timeouts = Timeouts()) {
   val dataDir: File = folder.newFolder("data")
   val index = File(dataDir, "index.jsonl")
-  val finder = Finder(binary, dataDir, store)
+  val finder = Finder(binary, dataDir, store, timeouts)
 }
 
 fun isRoot(): Boolean = System.getProperty("user.name") == "root"
