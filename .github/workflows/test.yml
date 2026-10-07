@@ -105,9 +105,11 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       # The steps of `mise run test-device`, without the performance check: that needs the real
-      # library on a real device. Each script line runs on its own.
+      # library on a real device. Each script line runs on its own. A test may take 2 minutes, so a
+      # hung one fails with where it hangs; a failed run saves the device log.
       - name: Test
         uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 25
         with:
           api-level: ${{ matrix.api-level }}
           target: google_apis
@@ -121,12 +123,14 @@ jobs:
           pre-emulator-launch-script: printf 'hw.lcd.width=1200\nhw.lcd.height=1920\nhw.lcd.density=240\n' >> ~/.android/avd/test.avd/config.ini
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: |
-            android/gradlew -p android connectedDebugAndroidTest
-            android/gradlew -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.withoutAccess=true -Pandroid.testInstrumentationRunnerArguments.class=dev.tabsync.tabfinder.AccessAndScanTest#accessPromptWhenNothingIsGranted
+            android/gradlew -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.timeout_msec=120000 || (adb logcat -d -v time > android/app/build/logcat.txt; exit 1)
+            android/gradlew -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.timeout_msec=120000 -Pandroid.testInstrumentationRunnerArguments.withoutAccess=true -Pandroid.testInstrumentationRunnerArguments.class=dev.tabsync.tabfinder.AccessAndScanTest#accessPromptWhenNothingIsGranted || (adb logcat -d -v time > android/app/build/logcat.txt; exit 1)
             android/gradlew -p android installDebug
-            scripts/device-process-death.sh
+            scripts/device-process-death.sh || (adb logcat -d -v time > android/app/build/logcat.txt; exit 1)
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: android-device-reports-api${{ matrix.api-level }}
-          path: android/app/build/reports/androidTests
+          path: |
+            android/app/build/reports/androidTests
+            android/app/build/logcat.txt
