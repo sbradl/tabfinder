@@ -264,6 +264,55 @@ func TestTagFast(t *testing.T) {
 	}
 }
 
+// at is a bar of power chords struck at these times, each lasting to the next.
+func at(starts ...int) []score.Beat {
+	var out []score.Beat
+	for i, st := range starts {
+		end := 4 * q
+		if i+1 < len(starts) {
+			end = starts[i+1]
+		}
+		out = append(out, score.Beat{Start: st, Dur: end - st, Notes: powerChord})
+	}
+	return out
+}
+
+func TestTagSyncopated(t *testing.T) {
+	tied := []score.Note{{String: 0, Fret: 0, Tie: true}, {String: 1, Fret: 2, Tie: true}}
+	// Pushed: the last chord comes an eighth early and is held over the bar line.
+	pushed := append([]score.Beat{{Start: 0, Dur: q, Notes: tied}}, at(q, 2*q, 3*q+e)[:]...)
+	funk := rockBeat()
+	for i := range funk {
+		if funk[i].Start == q+e { // kick on the "and" of 2, nothing on 3
+			funk[i].Notes = []score.Note{kick, hat}
+		}
+		if funk[i].Start == 2*q {
+			funk[i].Notes = []score.Note{hat}
+		}
+	}
+	tests := []struct {
+		name  string
+		info  []difficulty.TrackInfo
+		role  difficulty.Role
+		track score.Track
+		want  bool
+	}{
+		{"straight eighths", rhythmGuitar, difficulty.Rhythm, track(8, every(e, powerChord...)), false},
+		{"straight sixteenths", rhythmGuitar, difficulty.Rhythm, track(8, every(s, powerChord...)), false},
+		{"3-3-2", rhythmGuitar, difficulty.Rhythm, track(8, at(0, 3*e, 6*e)), true},
+		{"pushed over the bar line", rhythmGuitar, difficulty.Rhythm, track(8, pushed), true},
+		{"chord on the and of 4, then on 1", rhythmGuitar, difficulty.Rhythm, track(8, at(0, q, 2*q, 3*q+e)), false},
+		{"rock beat", drumKit, difficulty.Drums, score.Track{Drums: true, Bars: track(8, rockBeat()).Bars}, false},
+		{"funk kick", drumKit, difficulty.Drums, score.Track{Drums: true, Bars: track(8, funk).Bars}, true},
+	}
+	for _, tt := range tests {
+		sc := &score.Score{Bars: bars4(8, 100), Tracks: []score.Track{tt.track}}
+		if got := slices.Contains(tagsOf(t, sc, tt.info, tt.role), "syncopated"); got != tt.want {
+			t.Errorf("%s: syncopated %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 // melody is a bar of single sixteenth notes up and down the B and high E strings
 // around the 12th fret, with fx on every fourth note.
 func melody(fx score.Fx) []score.Beat {

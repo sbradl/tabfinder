@@ -92,7 +92,11 @@ func Analyze(sc *score.Score, tracks []TrackInfo) []Part {
 				if b < len(sc.Bars) {
 					head = sc.Bars[b]
 				}
-				bars = append(bars, bar{i, b, head, sc.Tracks[i].Bars[b]})
+				var next []score.Beat
+				if b+1 < len(sc.Tracks[i].Bars) {
+					next = sc.Tracks[i].Bars[b+1]
+				}
+				bars = append(bars, bar{i, b, head, sc.Tracks[i].Bars[b], next})
 			}
 		}
 		p.Tags = tags(r, bars)
@@ -106,6 +110,7 @@ type bar struct {
 	track, index int
 	head         score.Bar // time signature, tempo
 	beats        []score.Beat
+	next         []score.Beat // the track's next bar, nil at the end
 }
 
 // fastRate is the notes per second, by role, from which playing counts as fast: about
@@ -118,6 +123,9 @@ func tags(r Role, bars []bar) []string {
 	var out []string
 	if often(bars, func(b bar) bool { return rate(b) >= fastRate[r] }) {
 		out = append(out, "fast")
+	}
+	if often(bars, func(b bar) bool { return syncopated(b, r == Drums) }) {
+		out = append(out, "syncopated")
 	}
 	if often(bars, func(b bar) bool { return oddMeter(b.head) }) {
 		out = append(out, "odd meter")
@@ -146,17 +154,76 @@ func rate(b bar) float64 {
 	return float64(onsets) / seconds(b.head)
 }
 
+// syncopated reports whether at least a quarter of a bar's notes are syncopated: struck
+// on an off-beat with nothing new on the stronger beat after it, which it is held or
+// rested through. Of drums only kick and snare count; cymbals keep time.
+func syncopated(b bar, drums bool) bool {
+	counts := func(beat score.Beat) bool {
+		if !drums {
+			return beat.Struck()
+		}
+		for _, n := range beat.Notes {
+			if !n.Tie && (isKick(n.Fret) || isSnare(n.Fret)) {
+				return true
+			}
+		}
+		return false
+	}
+	onsets := map[int]bool{}
+	for _, beat := range b.beats {
+		if counts(beat) {
+			onsets[beat.Start] = true
+		}
+	}
+	nextOnBeat := false // the next bar starts with a note
+	for _, beat := range b.next {
+		if beat.Start == 0 && counts(beat) {
+			nextOnBeat = true
+		}
+	}
+	const q, e, s = score.Quarter, score.Quarter / 2, score.Quarter / 4
+	length := barTicks(b.head)
+	syncopes := 0
+	for t := range onsets {
+		var stronger int
+		switch {
+		case t%q == 0:
+			continue // on the beat
+		case t%e == 0:
+			stronger = t + e // the next beat
+		case t%s == 0:
+			stronger = t + s // the next eighth
+		default:
+			continue // tuplets
+		}
+		switch {
+		case stronger < length && !onsets[stronger]:
+			syncopes++
+		case stronger >= length && b.next != nil && !nextOnBeat:
+			syncopes++
+		}
+	}
+	return syncopes > 0 && 4*syncopes >= len(onsets)
+}
+
+func isKick(midi int) bool  { return midi == 35 || midi == 36 }
+func isSnare(midi int) bool { return midi >= 37 && midi <= 40 || midi == 91 }
+
+// barTicks is a bar's length.
+func barTicks(b score.Bar) int {
+	if b.Num > 0 && b.Den > 0 {
+		return b.Num * 4 * score.Quarter / b.Den
+	}
+	return 4 * score.Quarter
+}
+
 // seconds is how long a bar takes; at 120 BPM if its tempo is unknown.
 func seconds(b score.Bar) float64 {
 	bpm := b.BPM
 	if bpm <= 0 {
 		bpm = 120
 	}
-	ticks := 4 * score.Quarter
-	if b.Num > 0 && b.Den > 0 {
-		ticks = b.Num * 4 * score.Quarter / b.Den
-	}
-	return float64(ticks) / score.Quarter * 60 / bpm
+	return float64(barTicks(b)) / score.Quarter * 60 / bpm
 }
 
 // oddMeter reports whether a bar is in an odd time signature: 5/4 or 7/8, but not 3/4 or
