@@ -140,6 +140,32 @@ func TestTagTriplets(t *testing.T) {
 	}
 }
 
+func TestTagTuplets(t *testing.T) {
+	bars := func(fill []score.Beat) score.Track {
+		return score.Track{Bars: [][]score.Beat{fill, every(e, powerChord...), fill, every(e, powerChord...)}}
+	}
+	tests := []struct {
+		name              string
+		track             score.Track
+		triplets, tuplets bool
+	}{
+		{"quintuplets", bars(tuplets(5, s, powerChord...)), false, true},
+		{"septuplets", bars(tuplets(7, s, powerChord...)), false, true},
+		{"sextuplets are triplets", bars(tuplets(6, s, powerChord...)), true, false},
+		{"twelve 32nd triplets are triplets", bars(tuplets(12, s/2, powerChord...)), true, false},
+	}
+	for _, tt := range tests {
+		sc := &score.Score{Bars: bars4(4, 100), Tracks: []score.Track{tt.track}}
+		tags := tagsOf(t, sc, rhythmGuitar, difficulty.Rhythm)
+		if got := slices.Contains(tags, "triplets"); got != tt.triplets {
+			t.Errorf("%s: triplets %v, want %v", tt.name, got, tt.triplets)
+		}
+		if got := slices.Contains(tags, "tuplets"); got != tt.tuplets {
+			t.Errorf("%s: tuplets %v, want %v", tt.name, got, tt.tuplets)
+		}
+	}
+}
+
 // melody is a bar of single sixteenth notes up and down the B and high E strings
 // around the 12th fret, with fx on every fourth note.
 func melody(fx score.Fx) []score.Beat {
