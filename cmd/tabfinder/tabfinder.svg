@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <!-- Same as the Android launcher icon: a brass pick over a tab staff on graphite. -->
+  <rect width="108" height="108" rx="18" fill="#1D2125"/>
+  <path stroke="#55606A" stroke-width="1.6" d="M12,37H96M12,43H96M12,49H96M12,55H96M12,61H96M12,67H96"/>
+  <path fill="#D9A441" stroke="#1D2125" stroke-width="3" d="M54,80 C47,71 35,55 35,43 C35,34 43,29 54,29 C65,29 73,34 73,43 C73,55 61,71 54,80 Z"/>
+  <path fill="#F0C66E" d="M45,36 C48,33.5 51,33 54,33 C52,35 49,37 46.5,40 Z"/>
+</svg>

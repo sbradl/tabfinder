@@ -1,0 +1,15 @@
+Amber Marsh/amber_marsh_dawn_of_the_copper_giant.gp3	->	Amber Marsh/Dawn of the Copper Giant/Dawn of the Copper Giant.gp3
+Argyle Moth/argyle_moth_gluttonous.gp3	->	Argyle Moth/Gluttonous.gp3
+Broken/garbled.gp5	->	Broken/Garbled.gp5
+Cousins of Marrow/Quiet Morning.gp3	->	Cousins of Marrow/Moonbreder/Quiet Morning.gp3
+Cousins of Marrow/Tidebloom.gp3	->	Cousins of Marrow/Moonbreder/Tidebloom.gp3
+Die Äther/Felix Ferien - Weniger.gp3	->	Felix Ferien/Endlich Ferien/Weniger.gp3
+Sodbury Lane/Agent Marmalade/sodbury lane_umgezogen.gp3.zip	->	Sodbury Lane/Agent Marmalade/Umgezogen.gp3.zip
+Soilbed Quartet/Brass Kettle.gp	->	Soilbed Quartet/Glass Orchard/Brass Kettle (2).gp
+Soilbed Quartet - Rust Parade.gp3	->	Soilbed Quartet/Glass Orchard/Rust Parade.gp3
+mystery_tab.gp3	->	Mystery Tab.gp3
+
+# Not renamed, same song name in one folder (1 groups):
+
+Metro Kettle/Tan Album/Enter Daydream (ver 1).gp3
+Metro Kettle/Tan Album/Enter Daydream (ver 2).gp3

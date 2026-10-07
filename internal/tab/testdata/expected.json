@@ -1,0 +1,508 @@
+{
+  "Dust Kites/Raw Takes/Rope Bridge.ptb": {
+    "format": "ptb",
+    "title": "Rope Bridge",
+    "artist": "Dust Kites",
+    "album": "Raw Takes",
+    "titleSource": "file",
+    "artistSource": "file",
+    "albumSource": "path"
+  },
+  "Moss Cathedral/Hollow Choir/Lantern.tg": {
+    "format": "tg",
+    "title": "Lantern",
+    "artist": "Moss Cathedral",
+    "album": "Hollow Choir",
+    "titleSource": "file",
+    "artistSource": "path",
+    "albumSource": "path"
+  },
+  "Moss Cathedral/Hollow Choir/Under Glass.tg": {
+    "format": "tg",
+    "title": "Under Glass",
+    "artist": "Moss Cathedral",
+    "album": "Hollow Choir",
+    "titleSource": "file",
+    "artistSource": "file",
+    "albumSource": "file",
+    "tracks": [
+      {
+        "name": "Guitar",
+        "instrument": "Overdriven Guitar",
+        "pitches": [
+          40,
+          45,
+          50,
+          55,
+          59,
+          64
+        ],
+        "tuning": "E Standard (E A D G B E)"
+      },
+      {
+        "name": "Bass",
+        "instrument": "Electric Bass (finger)",
+        "pitches": [
+          28,
+          33,
+          38,
+          43
+        ],
+        "tuning": "E Standard (E A D G)"
+      },
+      {
+        "name": "Drums",
+        "instrument": "Drums",
+        "drums": true
+      }
+    ],
+    "tempos": [
+      {
+        "bar": 1,
+        "bpm": 100
+      },
+      {
+        "bar": 3,
+        "bpm": 140
+      }
+    ]
+  },
+  "Neon Harbor/Glass Tides/Salt Lamp.gp3": {
+    "format": "gp3",
+    "title": "Salt Lamp",
+    "artist": "Neon Harbor",
+    "album": "Glass Tides",
+    "titleSource": "file",
+    "artistSource": "file",
+    "albumSource": "file",
+    "tracks": [
+      {
+        "name": "Lead Guitar",
+        "instrument": "Overdriven Guitar",
+        "pitches": [
+          40,
+          45,
+          50,
+          55,
+          59,
+          64
+        ],
+        "tuning": "E Standard (E A D G B E)"
+      }
+    ],
+    "tempos": [
+      {
+        "bar": 1,
+        "bpm": 132
+      },
+      {
+        "bar": 4,
+        "bpm": 96
+      },
+      {
+        "bar": 7,
+        "bpm": 132
+      }
+    ]
+  },
+  "Neon Harbor/Glass Tides/Zipped.zip": {
+    "format": "gp5",
+    "title": "Zipped Song",
+    "artist": "Neon Harbor",
+    "album": "Glass Tides",
+    "titleSource": "file",
+    "artistSource": "file",
+    "albumSource": "file",
+    "tracks": [
+      {
+        "name": "Guitar",
+        "instrument": "Electric Guitar (clean)",
+        "pitches": [
+          40,
+          45,
+          50,
+          55,
+          59,
+          64
+        ],
+        "tuning": "E Standard (E A D G B E)"
+      },
+      {
+        "name": "Bass",
+        "instrument": "Electric Bass (finger)",
+        "pitches": [
+          28,
+          33,
+          38,
+          43
+        ],
+        "tuning": "E Standard (E A D G)"
+      }
+    ],
+    "tempos": [
+      {
+        "bar": 1,
+        "bpm": 120
+      }
+    ]
+  },
+  "Old Machines/Ancient Riff.ptb": {
+    "format": "",
+    "title": "Ancient Riff",
+    "artist": "Old Machines",
+    "album": "",
+    "titleSource": "path",
+    "artistSource": "path",
+    "albumSource": "path",
+    "errorContains": "Power Tab 1.0 files are not supported"
+  },
+  "Old Machines/Pre-History.gtp": {
+    "format": "",
+    "title": "Pre-History",
+    "artist": "Old Machines",
+    "album": "",
+    "titleSource": "path",
+    "artistSource": "path",
+    "albumSource": "path",
+    "errorContains": "Guitar Pro 2 files are not supported"
+  },
+  "Orbit Club/Night Shift.gp": {
+    "format": "gp7",
+    "title": "Night Shift",
+    "artist": "Orbit Club",
+    "album": "Late Hours",
+    "titleSource": "file",
+    "artistSource": "file",
+    "albumSource": "file",
+    "tracks": [
+      {
+        "name": "Eight",
+        "instrument": "Electric Guitar",
+        "pitches": [
+          30,
+          35,
+          40,
+          45,
+          50,
+          55,
+          59,
+          64
+        ],
+        "tuning": "Custom (F# B E A D G B E)"
+      },
+      {
+        "name": "Kit",
+        "instrument": "Drums",
+        "drums": true
+      },
+      {
+        "name": "Low",
+        "instrument": "Electric Bass",
+        "pitches": [
+          28,
+          33,
+          38,
+          43
+        ],
+        "tuning": "E Standard (E A D G)"
+      }
+    ],
+    "tempos": [
+      {
+        "bar": 1,
+        "bpm": 128
+      },
+      {
+        "bar": 3,
+        "bpm": 120.5
+      },
+      {
+        "bar": 7,
+        "bpm": 128
+      }
+    ]
+  },
+  "Paper Satellites/Cold Start.gpx": {
+    "format": "gp6",
+    "title": "Cold Start",
+    "artist": "Paper Satellites",
+    "album": "Orbit Notes",
+    "titleSource": "file",
+    "artistSource": "file",
+    "albumSource": "file",
+    "tracks": [
+      {
+        "name": "Guitar",
+        "instrument": "Electric Guitar (clean)",
+        "pitches": [
+          40,
+          45,
+          50,
+          55,
+          59,
+          64
+        ],
+        "tuning": "E Standard (E A D G B E)"
+      },
+      {
+        "name": "Drums",
+        "instrument": "Drums",
+        "drums": true
+      }
+    ],
+    "tempos": [
+      {
+        "bar": 1,
+        "bpm": 120
+      },
+      {
+        "bar": 5,
+        "bpm": 90
+      }
+    ]
+  },
+  "Paper Satellites/Half Down.gpx.crdownload": {
+    "format": "gp6",
+    "title": "Half Down",
+    "artist": "Paper Satellites",
+    "album": "",
+    "titleSource": "file",
+    "artistSource": "file",
+    "albumSource": "path",
+    "tracks": [
+      {
+        "name": "Guitar",
+        "instrument": "Acoustic Guitar (steel)",
+        "pitches": [
+          38,
+          45,
+          50,
+          55,
+          59,
+          64
+        ],
+        "tuning": "Drop D (D A D G B E)"
+      }
+    ],
+    "tempos": [
+      {
+        "bar": 1,
+        "bpm": 110
+      }
+    ]
+  },
+  "Quiet Engines/Slow Orbit/Tin Moon.gp4": {
+    "format": "gp4",
+    "title": "Tin Moon",
+    "artist": "Quiet Engines",
+    "album": "Slow Orbit",
+    "titleSource": "file",
+    "artistSource": "file",
+    "albumSource": "file",
+    "tracks": [
+      {
+        "name": "Guitar",
+        "instrument": "Distortion Guitar",
+        "pitches": [
+          38,
+          45,
+          50,
+          55,
+          59,
+          64
+        ],
+        "tuning": "Drop D (D A D G B E)"
+      },
+      {
+        "name": "Bass",
+        "instrument": "Electric Bass (finger)",
+        "pitches": [
+          28,
+          33,
+          38,
+          43
+        ],
+        "tuning": "E Standard (E A D G)"
+      },
+      {
+        "name": "Drums",
+        "instrument": "Drums",
+        "drums": true
+      }
+    ],
+    "tempos": [
+      {
+        "bar": 1,
+        "bpm": 90
+      },
+      {
+        "bar": 3,
+        "bpm": 100
+      }
+    ]
+  },
+  "Seventh Floor/Static Garden/Cut Short.gp5": {
+    "format": "gp5",
+    "title": "Paper Weather",
+    "artist": "Seventh Floor",
+    "album": "Static Garden",
+    "titleSource": "file",
+    "artistSource": "file",
+    "albumSource": "file",
+    "tracks": [
+      {
+        "name": "Rhythm 7",
+        "instrument": "Distortion Guitar",
+        "pitches": [
+          35,
+          40,
+          45,
+          50,
+          55,
+          59,
+          64
+        ],
+        "tuning": "B Standard (B E A D G B E)"
+      },
+      {
+        "name": "Lead",
+        "instrument": "Overdriven Guitar",
+        "pitches": [
+          36,
+          43,
+          48,
+          53,
+          57,
+          62
+        ],
+        "tuning": "Drop C (C G C F A D)"
+      },
+      {
+        "name": "Pad",
+        "instrument": "Acoustic Guitar (steel)",
+        "pitches": [
+          40,
+          45,
+          50,
+          55,
+          59,
+          64
+        ],
+        "tuning": "E Standard (E A D G B E)"
+      }
+    ],
+    "errorContains": "tempo changes incomplete",
+    "tempoPrefixOf": "F3"
+  },
+  "Seventh Floor/Static Garden/Misnamed.gp3": {
+    "format": "gp5",
+    "title": "Rename Me",
+    "artist": "Seventh Floor",
+    "album": "Static Garden",
+    "titleSource": "file",
+    "artistSource": "path",
+    "albumSource": "path",
+    "tracks": [
+      {
+        "name": "Guitar",
+        "instrument": "Electric Guitar (clean)",
+        "pitches": [
+          40,
+          45,
+          50,
+          55,
+          59,
+          64
+        ],
+        "tuning": "E Standard (E A D G B E)"
+      }
+    ],
+    "tempos": [
+      {
+        "bar": 1,
+        "bpm": 100
+      },
+      {
+        "bar": 3,
+        "bpm": 110
+      }
+    ]
+  },
+  "Seventh Floor/Static Garden/Paper Weather.gp5": {
+    "format": "gp5",
+    "title": "Paper Weather",
+    "artist": "Seventh Floor",
+    "album": "Static Garden",
+    "titleSource": "file",
+    "artistSource": "file",
+    "albumSource": "file",
+    "tracks": [
+      {
+        "name": "Rhythm 7",
+        "instrument": "Distortion Guitar",
+        "pitches": [
+          35,
+          40,
+          45,
+          50,
+          55,
+          59,
+          64
+        ],
+        "tuning": "B Standard (B E A D G B E)"
+      },
+      {
+        "name": "Lead",
+        "instrument": "Overdriven Guitar",
+        "pitches": [
+          36,
+          43,
+          48,
+          53,
+          57,
+          62
+        ],
+        "tuning": "Drop C (C G C F A D)"
+      },
+      {
+        "name": "Pad",
+        "instrument": "Acoustic Guitar (steel)",
+        "pitches": [
+          40,
+          45,
+          50,
+          55,
+          59,
+          64
+        ],
+        "tuning": "E Standard (E A D G B E)"
+      }
+    ],
+    "tempos": [
+      {
+        "bar": 1,
+        "bpm": 140
+      },
+      {
+        "bar": 3,
+        "bpm": 70
+      },
+      {
+        "bar": 5,
+        "bpm": 140
+      },
+      {
+        "bar": 8,
+        "bpm": 155
+      },
+      {
+        "bar": 11,
+        "bpm": 140
+      },
+      {
+        "bar": 41,
+        "bpm": 90
+      }
+    ]
+  }
+}

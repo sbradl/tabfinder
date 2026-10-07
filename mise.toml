@@ -1,0 +1,78 @@
+[tools]
+go = "1.27"
+java = "temurin-21"
+gradle = "9.8" # only to bootstrap the wrapper; builds use android/gradlew
+android-cli = "1.0.16500706" # SDK manager; replaces deprecated sdkmanager
+
+[env]
+ANDROID_HOME = "{{env.HOME}}/Android/Sdk"
+_.path = ["{{env.HOME}}/Android/Sdk/platform-tools"]
+ANDROID_PLATFORM = "android-36" # match compileSdk in android/app/build.gradle.kts
+ANDROID_BUILD_TOOLS = "36.0.0" # AGP 9.0 default
+JNI_BIN = "{{config_root}}/android/app/src/main/jniLibs/arm64-v8a/libtabscan.so"
+
+[tasks.setup]
+description = "Install toolchain and Android SDK packages"
+run = ["mise install", "mise run sdk"]
+
+[tasks.sdk]
+description = "Install Android SDK packages"
+run = 'android sdk install platform-tools "platforms/$ANDROID_PLATFORM" "build-tools/$ANDROID_BUILD_TOOLS"'
+
+[tasks.cli]
+description = "Build tabscan and tabreorg for this machine"
+sources = ["go.mod", "cmd/**/*.go", "internal/**/*.go"]
+outputs = ["tabscan", "tabreorg"]
+run = ["go build ./cmd/tabscan", "go build ./cmd/tabreorg"]
+
+[tasks.bin]
+description = "Cross-compile tabscan for Android arm64 into the app's jniLibs"
+sources = ["go.mod", "cmd/tabscan/*.go", "internal/**/*.go"]
+outputs = ["android/app/src/main/jniLibs/arm64-v8a/libtabscan.so"]
+env = { GOOS = "android", GOARCH = "arm64", CGO_ENABLED = "0" }
+run = 'mkdir -p "$(dirname "$JNI_BIN")" && go build -trimpath -ldflags="-s -w" -o "$JNI_BIN" ./cmd/tabscan'
+
+[tasks.test]
+description = "Run the tests: Go, then the Android JVM tests (which build tabscan for this machine)"
+run = ["go test ./...", "android/gradlew -p android testDebugUnitTest"]
+
+[tasks.test-device]
+description = "Device tests on the connected device (debug build, installed next to the real app) and the performance check on the installed release app"
+run = [
+  "android/gradlew -p android connectedDebugAndroidTest",
+  # The no-access prompt needs an app without the storage permission: a fresh install, which the run above left behind by uninstalling.
+  "android/gradlew -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.withoutAccess=true -Pandroid.testInstrumentationRunnerArguments.class=dev.tabsync.tabfinder.AccessAndScanTest#accessPromptWhenNothingIsGranted",
+  "android/gradlew -p android installDebug",
+  "scripts/device-process-death.sh",
+  "scripts/perf-device.sh",
+]
+
+[tasks.apk]
+description = "Build the release APK (R8-optimized, debug-signed; debug builds scroll badly)"
+depends = ["bin"]
+dir = "android"
+run = "./gradlew assembleRelease"
+
+[tasks.install]
+description = "Build and install the app on the connected device"
+depends = ["apk"]
+run = [
+  "android install --apks=android/app/build/outputs/apk/release/app-release.apk",
+  # Compile the whole app ahead of time. Android otherwise only precompiles what the libraries'
+  # baseline profiles list, later when idle; until then the app's own code runs interpreted,
+  # which costs about 1 s of startup and makes scrolling stutter.
+  "adb shell cmd package compile -m speed -f dev.tabsync.tabfinder",
+]
+
+[tasks.launch]
+description = "Build, install and launch the app on the connected device"
+depends = ["install"]
+run = "adb shell am start -n dev.tabsync.tabfinder/.MainActivity"
+
+[tasks.desktop]
+description = "Run the desktop app"
+run = "go run -ldflags=-X=gioui.org/app.ID=dev.tabsync.tabfinder ./cmd/tabfinder"
+
+[tasks.desktop-install]
+description = "Install the desktop app to ~/.local with an application menu entry"
+run = "cmd/tabfinder/install.sh"
