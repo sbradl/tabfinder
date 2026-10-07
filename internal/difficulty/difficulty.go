@@ -39,48 +39,118 @@ type Part struct {
 // Analyze splits a song into parts, in the order drums, bass, rhythm, lead, leaving out
 // those nobody plays. tracks are the score's tracks, in the same order.
 func Analyze(sc *score.Score, tracks []TrackInfo) []Part {
-	byRole := map[Role]*Part{}
-	for i, info := range tracks {
-		if i >= len(sc.Tracks) || !plays(&sc.Tracks[i]) {
-			continue
+	// What each role plays: the bars of each track, by track index.
+	played := map[Role]map[int][]int{}
+	play := func(r Role, track, bar int) {
+		if played[r] == nil {
+			played[r] = map[int][]int{}
 		}
+		played[r][track] = append(played[r][track], bar)
+	}
+	for i, info := range tracks {
+		if i >= len(sc.Tracks) {
+			break
+		}
+		t := &sc.Tracks[i]
 		var r Role
 		switch {
-		case info.Drums || sc.Tracks[i].Drums:
+		case info.Drums || t.Drums:
 			r = Drums
 		case isBass(info):
 			r = Bass
 		case isGuitar(info):
-			r = Rhythm
+			r = Rhythm // or lead, by bar
 		default:
 			continue
 		}
-		p := byRole[r]
-		if p == nil {
-			p = &Part{Role: r}
-			byRole[r] = p
+		for b, beats := range t.Bars {
+			if !struck(beats) {
+				continue
+			}
+			if r == Rhythm && isLead(beats, info) {
+				play(Lead, i, b)
+			} else {
+				play(r, i, b)
+			}
 		}
-		p.Tracks = append(p.Tracks, i)
 	}
 	var out []Part
 	for _, r := range roles {
-		if p := byRole[r]; p != nil {
-			out = append(out, *p)
+		if played[r] == nil {
+			continue
 		}
+		p := Part{Role: r}
+		for i := range tracks {
+			if len(played[r][i]) > 0 {
+				p.Tracks = append(p.Tracks, i)
+			}
+		}
+		out = append(out, p)
 	}
 	return out
 }
 
-// plays reports whether a track strikes any note.
-func plays(t *score.Track) bool {
-	for _, bar := range t.Bars {
-		for _, b := range bar {
-			if b.Struck() {
-				return true
-			}
+// struck reports whether any of the beats strikes a note.
+func struck(beats []score.Beat) bool {
+	for _, b := range beats {
+		if b.Struck() {
+			return true
 		}
 	}
 	return false
+}
+
+var (
+	reLeadName   = regexp.MustCompile(`(?i)lead|solo`)
+	reRhythmName = regexp.MustCompile(`(?i)rhy`)
+)
+
+// isLead reports whether a guitar's bar is a lead line rather than rhythm playing:
+// mostly single notes, not palm-muted, up high or bent and slid. Riffs are chords or low
+// single notes.
+func isLead(beats []score.Beat, t TrackInfo) bool {
+	var struckBeats, single, notes, muted, pitchSum int
+	expressive := false
+	for _, b := range beats {
+		if !b.Struck() {
+			continue
+		}
+		struckBeats++
+		if len(b.Notes) == 1 {
+			single++
+		}
+		for _, n := range b.Notes {
+			notes++
+			if n.Fx&score.PalmMute != 0 {
+				muted++
+			}
+			if n.Fx&(score.Bend|score.Vibrato|score.Slide|score.Tap|score.Legato) != 0 {
+				expressive = true
+			}
+			pitchSum += pitch(t, n)
+		}
+	}
+	if struckBeats == 0 || 10*single < 6*struckBeats || 2*muted >= notes {
+		return false
+	}
+	low, high := 50, 57 // D3, A3: an expressive line above the first, any line above the second
+	switch {
+	case reLeadName.MatchString(t.Name):
+		low, high = 45, 50
+	case reRhythmName.MatchString(t.Name):
+		low, high = 57, 62
+	}
+	mean := pitchSum / notes
+	return mean >= high || expressive && mean >= low
+}
+
+// pitch is a note's MIDI pitch, guessing a standard-tuned guitar if the tuning is unknown.
+func pitch(t TrackInfo, n score.Note) int {
+	if n.String >= 0 && n.String < len(t.Pitches) {
+		return t.Pitches[n.String] + n.Fret
+	}
+	std := []int{40, 45, 50, 55, 59, 64}
+	return std[min(max(n.String, 0), len(std)-1)] + n.Fret
 }
 
 var (

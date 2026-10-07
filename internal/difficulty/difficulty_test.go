@@ -80,3 +80,58 @@ func TestRoles(t *testing.T) {
 		t.Errorf("parts:\n got %+v\nwant %+v", got, want)
 	}
 }
+
+// melody is a bar of single sixteenth notes up and down the B and high E strings
+// around the 12th fret, with fx on every fourth note.
+func melody(fx score.Fx) []score.Beat {
+	var out []score.Beat
+	frets := []int{12, 14, 15, 17, 15, 14, 12, 15}
+	for i, t := 0, 0; t < 4*q; i, t = i+1, t+s {
+		n := score.Note{String: 4 + i%2, Fret: frets[i%len(frets)]}
+		if i%4 == 0 {
+			n.Fx = fx
+		}
+		out = append(out, score.Beat{Start: t, Dur: s, Notes: []score.Note{n}})
+	}
+	return out
+}
+
+// guitarRoles is the roles each track plays in.
+func guitarRoles(sc *score.Score, tracks []difficulty.TrackInfo) map[difficulty.Role][]int {
+	out := map[difficulty.Role][]int{}
+	for _, p := range difficulty.Analyze(sc, tracks) {
+		out[p.Role] = p.Tracks
+	}
+	return out
+}
+
+func TestRhythmAndLeadByContent(t *testing.T) {
+	gtr := func(name string) difficulty.TrackInfo {
+		return difficulty.TrackInfo{Name: name, Instrument: "Distortion Guitar", Pitches: stdGuitar}
+	}
+	chug := every(s, score.Note{String: 0, Fret: 0, Fx: score.PalmMute}) // a palm-muted single-note riff
+	riffThenSolo := score.Track{Bars: [][]score.Beat{
+		every(e, powerChord...), every(e, powerChord...), chug, chug,
+		melody(score.Bend), melody(score.Vibrato), melody(score.Legato), melody(0),
+	}}
+	tests := []struct {
+		name   string
+		tracks []score.Track
+		info   []difficulty.TrackInfo
+		want   map[difficulty.Role][]int
+	}{
+		{"one guitarist, riffs then a solo", []score.Track{riffThenSolo}, []difficulty.TrackInfo{gtr("Guitar")},
+			map[difficulty.Role][]int{difficulty.Rhythm: {0}, difficulty.Lead: {0}}},
+		{"rhythm and lead track", []score.Track{track(8, every(e, powerChord...)), track(8, melody(score.Bend))},
+			[]difficulty.TrackInfo{gtr("Guitar 1"), gtr("Guitar 2")},
+			map[difficulty.Role][]int{difficulty.Rhythm: {0}, difficulty.Lead: {1}}},
+		{"single-note riff is rhythm", []score.Track{track(8, chug)}, []difficulty.TrackInfo{gtr("Guitar")},
+			map[difficulty.Role][]int{difficulty.Rhythm: {0}}},
+	}
+	for _, tt := range tests {
+		sc := &score.Score{Bars: bars4(8, 120), Tracks: tt.tracks}
+		if got := guitarRoles(sc, tt.info); !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("%s: %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
