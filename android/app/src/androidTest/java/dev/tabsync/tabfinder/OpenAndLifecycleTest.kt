@@ -15,10 +15,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
-import androidx.test.espresso.intent.matcher.IntentMatchers.hasFlag
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasPackage
 import java.io.File
-import org.hamcrest.Matchers.allOf
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -50,8 +48,11 @@ class OpenAndLifecycleTest : DeviceTest() {
       Intents.intending(hasPackage(TuxGuitar.PACKAGE)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, null))
       compose.onNodeWithTag("song-Gorsewick/Gravel Hymns/Quartz.gpx.crdownload").performClick()
       until { Intents.getIntents().any { it.`package` == TuxGuitar.PACKAGE } } // the copy is made off the main thread first
-      Intents.intended(allOf(hasAction(Intent.ACTION_VIEW), hasPackage(TuxGuitar.PACKAGE), hasFlag(Intent.FLAG_GRANT_READ_URI_PERMISSION)))
+      // The recorded intent, not Intents.intended: that waits for the app's window to have focus, which the
+      // emulator's background apps sometimes take.
       val intent = Intents.getIntents().single { it.`package` == TuxGuitar.PACKAGE }
+      assertEquals(Intent.ACTION_VIEW, intent.action)
+      assertTrue("grants read access", intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
       val uri = intent.data!!
       assertEquals("content", uri.scheme)
       assertEquals("${context.packageName}.files", uri.authority)

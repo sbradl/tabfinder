@@ -24,17 +24,21 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
-      # Gio's build dependencies, plus Mesa and Xvfb so the desktop UI tests render offscreen
-      # (software EGL) instead of skipping their pixel checks and screenshots.
+      # Gio's build dependencies, plus Mesa's software renderer so the desktop UI tests render
+      # offscreen instead of skipping their pixel checks and screenshots.
       - name: Install Gio dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends gcc pkg-config libwayland-dev libx11-dev libx11-xcb-dev \
             libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev \
-            libgl1-mesa-dri xvfb xauth
+            libgl1-mesa-dri
+      # Surfaceless EGL needs no display server (under Xvfb, eglInitialize sometimes failed). With
+      # TABFINDER_SHOTS set, a renderer that doesn't start fails the tests rather than skipping them.
       - name: Test
-        run: xvfb-run -a go test -race ./...
+        run: go test -race ./...
         env:
+          EGL_PLATFORM: surfaceless
+          LIBGL_ALWAYS_SOFTWARE: "1"
           TABFINDER_SHOTS: ${{ runner.temp }}/shots
       - uses: actions/upload-artifact@v7
         if: always()

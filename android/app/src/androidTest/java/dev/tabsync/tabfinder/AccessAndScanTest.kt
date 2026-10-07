@@ -12,8 +12,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.espresso.intent.Intents
-import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
-import androidx.test.espresso.intent.matcher.IntentMatchers.hasData
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -37,12 +35,10 @@ class AccessAndScanTest : DeviceTest() {
       Intents.init()
       try {
         compose.onNodeWithTag("prompt-action").performClick()
-        Intents.intended(
-          org.hamcrest.Matchers.allOf(
-            hasAction(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION),
-            hasData("package:${context.packageName}"),
-          )
-        )
+        // The recorded intent, not Intents.intended, which waits for window focus (see OpenAndLifecycleTest).
+        until { Intents.getIntents().any { it.action == Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION } }
+        val intent = Intents.getIntents().single { it.action == Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION }
+        assertEquals("package:${context.packageName}", intent.dataString)
       } finally {
         Intents.release()
       }
