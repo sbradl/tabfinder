@@ -96,7 +96,7 @@ func Analyze(sc *score.Score, tracks []TrackInfo) []Part {
 				if b+1 < len(sc.Tracks[i].Bars) {
 					next = sc.Tracks[i].Bars[b+1]
 				}
-				bars = append(bars, bar{i, b, head, sc.Tracks[i].Bars[b], next})
+				bars = append(bars, bar{i, b, head, sc.Tracks[i].Bars[b], next, tracks[i]})
 			}
 		}
 		p.Tags = tags(r, bars)
@@ -111,6 +111,7 @@ type bar struct {
 	head         score.Bar // time signature, tempo
 	beats        []score.Beat
 	next         []score.Beat // the track's next bar, nil at the end
+	info         TrackInfo
 }
 
 // fastRate is the notes per second, by role, from which playing counts as fast: about
@@ -134,6 +135,14 @@ func tags(r Role, bars []bar) []string {
 	}
 	if often(bars, func(b bar) bool { return hasGhost(b) }) {
 		out = append(out, "ghost notes")
+	}
+	if r != Drums {
+		if often(bars, hasChord) {
+			out = append(out, "chords")
+		}
+		if often(bars, stretches) {
+			out = append(out, "stretches")
+		}
 	}
 	if r == Drums {
 		if often(bars, doubleKick) {
@@ -318,6 +327,71 @@ func isTriplet(n int) bool { return n == 3 || n == 6 || n == 12 || n == 24 }
 
 // isOddTuplet reports whether n:m tuplets are any other: 5, 7, 9...
 func isOddTuplet(n int) bool { return n > 1 && !isTriplet(n) }
+
+// hasChord reports whether a bar has a chord: three different notes or more struck together,
+// so more than a power chord.
+func hasChord(b bar) bool {
+	for _, beat := range b.beats {
+		var classes [12]bool
+		n := 0
+		for _, note := range beat.Notes {
+			if note.Tie || note.Dead {
+				continue
+			}
+			if c := pitch(b.info, note) % 12; !classes[c] {
+				classes[c], n = true, n+1
+			}
+		}
+		if n >= 3 {
+			return true
+		}
+	}
+	return false
+}
+
+// stretchFrets is the fret span that takes a stretch of the hand: five, index finger on
+// the 5th fret, little finger on the 10th.
+const stretchFrets = 5
+
+// stretches reports whether a bar asks for a stretch: frets that far apart in a chord, or
+// on different strings within a quarter note, where the hand has no time to move.
+func stretches(b bar) bool {
+	type frets struct {
+		lo, hi  int
+		strings map[int]bool
+	}
+	add := func(f *frets, n score.Note) {
+		if f.strings == nil {
+			f.lo, f.hi, f.strings = n.Fret, n.Fret, map[int]bool{}
+		}
+		f.lo, f.hi = min(f.lo, n.Fret), max(f.hi, n.Fret)
+		f.strings[n.String] = true
+	}
+	quarters := map[int]*frets{}
+	for _, beat := range b.beats {
+		var chord frets
+		for _, n := range beat.Notes {
+			if n.Tie || n.Dead || n.Fret == 0 { // open strings need no finger
+				continue
+			}
+			add(&chord, n)
+			k := beat.Start / score.Quarter
+			if quarters[k] == nil {
+				quarters[k] = &frets{}
+			}
+			add(quarters[k], n)
+		}
+		if chord.hi-chord.lo >= stretchFrets {
+			return true
+		}
+	}
+	for _, f := range quarters {
+		if len(f.strings) >= 2 && f.hi-f.lo >= stretchFrets {
+			return true
+		}
+	}
+	return false
+}
 
 // techniqueTags are the tags of playing techniques worth knowing about.
 var techniqueTags = []struct {

@@ -414,6 +414,58 @@ func TestTagTechniques(t *testing.T) {
 	}
 }
 
+// shape is a chord from frets per string, lowest first; -1 for a string not played.
+func shape(frets ...int) []score.Note {
+	var out []score.Note
+	for str, f := range frets {
+		if f >= 0 {
+			out = append(out, score.Note{String: str, Fret: f})
+		}
+	}
+	return out
+}
+
+func TestTagChordsAndStretches(t *testing.T) {
+	openG := shape(3, 2, 0, 0, 0, 3)
+	barreF := shape(1, 3, 3, 2, 1, 1)
+	stretchy := shape(-1, 1, 3, 5, 6, -1) // a span of five frets
+	e5, a5 := shape(0, 2, 2, -1, -1, -1), shape(-1, 0, 2, 2, -1, -1)
+	lick := []score.Beat{ // in one position: 5 and 9 on the G string, 5 and 10 on the B string
+		{Start: 0, Dur: s, Notes: shape(-1, -1, -1, 5, -1, -1)}, {Start: s, Dur: s, Notes: shape(-1, -1, -1, 9, -1, -1)},
+		{Start: 2 * s, Dur: s, Notes: shape(-1, -1, -1, -1, 5, -1)}, {Start: 3 * s, Dur: s, Notes: shape(-1, -1, -1, -1, 10, -1)},
+	}
+	slide := []score.Beat{ // the same frets one string at a time: the hand moves
+		{Start: 0, Dur: q, Notes: shape(-1, -1, -1, 5, -1, -1)}, {Start: q, Dur: q, Notes: shape(-1, -1, -1, 10, -1, -1)},
+	}
+	tests := []struct {
+		name              string
+		bar               []score.Beat
+		chords, stretches bool
+	}{
+		{"power chords", append(every(q, e5...)[:2], at(2 * q)[0]), false, false},
+		{"open chords", every(q, openG...), true, false},
+		{"barre chords", every(q, barreF...), true, false},
+		{"stretched chord", every(q, stretchy...), true, true},
+		{"power chords moving", []score.Beat{{Start: 0, Dur: 2 * q, Notes: e5}, {Start: 2 * q, Dur: 2 * q, Notes: a5}}, false, false},
+		{"stretched lick", lick, false, true},
+		{"shift along a string", slide, false, false},
+	}
+	for _, tt := range tests {
+		sc := &score.Score{Bars: bars4(4, 100), Tracks: []score.Track{track(4, tt.bar)}}
+		info := []difficulty.TrackInfo{{Name: "Guitar", Instrument: "Acoustic Guitar (steel)", Pitches: stdGuitar}}
+		var tags []string
+		for _, p := range difficulty.Analyze(sc, info) {
+			tags = append(tags, p.Tags...)
+		}
+		if got := slices.Contains(tags, "chords"); got != tt.chords {
+			t.Errorf("%s: chords %v, want %v", tt.name, got, tt.chords)
+		}
+		if got := slices.Contains(tags, "stretches"); got != tt.stretches {
+			t.Errorf("%s: stretches %v, want %v", tt.name, got, tt.stretches)
+		}
+	}
+}
+
 // melody is a bar of single sixteenth notes up and down the B and high E strings
 // around the 12th fret, with fx on every fourth note.
 func melody(fx score.Fx) []score.Beat {
