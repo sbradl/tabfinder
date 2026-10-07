@@ -39,6 +39,16 @@ type Beat struct {
 	Notes  []Note
 }
 
+// Struck reports whether the beat starts a sound: it has a note not tied over from before.
+func (b Beat) Struck() bool {
+	for _, n := range b.Notes {
+		if !n.Tie {
+			return true
+		}
+	}
+	return false
+}
+
 // AllFx is the techniques of the beat and its notes.
 func (b Beat) AllFx() Fx {
 	fx := b.Fx
