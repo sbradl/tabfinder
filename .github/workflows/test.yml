@@ -138,3 +138,4 @@ jobs:
           path: |
             android/app/build/reports/androidTests
             android/app/build/logcat.txt
+            android/app/build/process-death.png

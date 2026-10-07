@@ -12,7 +12,14 @@ ACTIVITY=$PKG/dev.tabsync.tabfinder.MainActivity
 DIR=/sdcard/TabFinderProcessDeathTest
 SONG="Salt Lamp" # a title in the fixture library
 
-fail() { echo "FAIL: $1" >&2; exit 1; }
+fail() {
+  echo "FAIL: $1" >&2
+  # What was on screen: the texts of the last dump, and a screenshot (CI uploads it).
+  echo "on screen:" >&2
+  adb shell cat /sdcard/ui.xml 2>/dev/null | grep -o 'text="[^"]\{1,\}"' | head -40 >&2 || true
+  mkdir -p android/app/build && adb exec-out screencap -p > android/app/build/process-death.png || true
+  exit 1
+}
 on_screen() { adb shell "uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; cat /sdcard/ui.xml 2>/dev/null" | grep -q "$1"; }
 wait_for() { # wait_for TEXT SECONDS
   i=0
