@@ -127,6 +127,14 @@ func tags(r Role, bars []bar) []string {
 	if often(bars, func(b bar) bool { return syncopated(b, r == Drums) }) {
 		out = append(out, "syncopated")
 	}
+	for _, tq := range techniqueTags {
+		if often(bars, func(b bar) bool { return uses(b, tq.fx) }) {
+			out = append(out, tq.tag)
+		}
+	}
+	if often(bars, func(b bar) bool { return hasGhost(b) }) {
+		out = append(out, "ghost notes")
+	}
 	if r == Drums {
 		if often(bars, doubleKick) {
 			out = append(out, "double kick")
@@ -310,6 +318,40 @@ func isTriplet(n int) bool { return n == 3 || n == 6 || n == 12 || n == 24 }
 
 // isOddTuplet reports whether n:m tuplets are any other: 5, 7, 9...
 func isOddTuplet(n int) bool { return n > 1 && !isTriplet(n) }
+
+// techniqueTags are the tags of playing techniques worth knowing about.
+var techniqueTags = []struct {
+	fx  score.Fx
+	tag string
+}{
+	{score.Bend, "bends"},
+	{score.Tap, "tapping"},
+	{score.Harmonic, "harmonics"},
+	{score.Slap, "slap"},
+	{score.Legato, "legato"},
+	{score.TremoloPicking, "tremolo picking"},
+}
+
+// uses reports whether a note struck in a bar is played with a technique.
+func uses(b bar, fx score.Fx) bool {
+	for _, beat := range b.beats {
+		if beat.Struck() && beat.AllFx()&fx != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func hasGhost(b bar) bool {
+	for _, beat := range b.beats {
+		for _, n := range beat.Notes {
+			if n.Ghost && !n.Tie {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // often reports whether bars with something come up in a part more than once or twice:
 // in at least two bars and every eighth.

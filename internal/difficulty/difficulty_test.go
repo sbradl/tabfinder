@@ -375,6 +375,45 @@ func TestTagDoubleKickAndBlastBeats(t *testing.T) {
 	}
 }
 
+func TestTagTechniques(t *testing.T) {
+	ghost := melody(0)
+	for i := range ghost {
+		if i%4 == 2 {
+			ghost[i].Notes = []score.Note{{String: ghost[i].Notes[0].String, Fret: ghost[i].Notes[0].Fret, Ghost: true}}
+		}
+	}
+	slap := melody(0)
+	slap[0].Fx = score.Slap
+	tests := []struct {
+		tag string
+		bar []score.Beat
+	}{
+		{"bends", melody(score.Bend)},
+		{"tapping", melody(score.Tap)},
+		{"harmonics", melody(score.Harmonic)},
+		{"slap", slap},
+		{"legato", melody(score.Legato)},
+		{"tremolo picking", melody(score.TremoloPicking)},
+		{"ghost notes", ghost},
+	}
+	plain := melody(0)
+	for _, tt := range tests {
+		for _, c := range []struct {
+			name string
+			bars [][]score.Beat
+			want bool
+		}{
+			{"in every other bar", [][]score.Beat{tt.bar, plain, tt.bar, plain, tt.bar, plain, tt.bar, plain}, true},
+			{"once in sixteen bars", append([][]score.Beat{tt.bar}, track(15, plain).Bars...), false},
+		} {
+			sc := &score.Score{Bars: bars4(len(c.bars), 100), Tracks: []score.Track{{Bars: c.bars}}}
+			if got := slices.Contains(tagsOf(t, sc, leadGuitar, difficulty.Lead), tt.tag); got != c.want {
+				t.Errorf("%s %s: %v, want %v", tt.tag, c.name, got, c.want)
+			}
+		}
+	}
+}
+
 // melody is a bar of single sixteenth notes up and down the B and high E strings
 // around the 12th fret, with fx on every fourth note.
 func melody(fx score.Fx) []score.Beat {
