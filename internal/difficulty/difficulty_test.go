@@ -2,6 +2,7 @@ package difficulty_test
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"tabfinder/internal/difficulty"
@@ -78,6 +79,64 @@ func TestRoles(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("parts:\n got %+v\nwant %+v", got, want)
+	}
+}
+
+// tuplets is a 4/4 bar of n:m tuplets of a note value with these notes.
+func tuplets(n int, value int, notes ...score.Note) []score.Beat {
+	dur := value * score.TupletBase(n) / n
+	var out []score.Beat
+	for t := 0; t+dur <= 4*q; t += dur {
+		out = append(out, score.Beat{Start: t, Dur: dur, Tuplet: n, Notes: notes})
+	}
+	return out
+}
+
+// tagsOf is the tags of the part of that role, nil if there's no such part.
+func tagsOf(t *testing.T, sc *score.Score, tracks []difficulty.TrackInfo, r difficulty.Role) []string {
+	t.Helper()
+	for _, p := range difficulty.Analyze(sc, tracks) {
+		if p.Role == r {
+			return p.Tags
+		}
+	}
+	t.Fatalf("no %s part", r)
+	return nil
+}
+
+var rhythmGuitar = []difficulty.TrackInfo{{Name: "Rhythm", Instrument: "Distortion Guitar", Pitches: stdGuitar}}
+
+// riff is a rhythm guitar track of power chords, bar by bar: true for a bar of eighth
+// triplets, false for straight eighths.
+func riff(triplets ...bool) score.Track {
+	var t score.Track
+	for _, tri := range triplets {
+		if tri {
+			t.Bars = append(t.Bars, tuplets(3, e, powerChord...))
+		} else {
+			t.Bars = append(t.Bars, every(e, powerChord...))
+		}
+	}
+	return t
+}
+
+func TestTagTriplets(t *testing.T) {
+	const o, x = false, true
+	tests := []struct {
+		name string
+		riff score.Track
+		want bool
+	}{
+		{"straight", riff(o, o, o, o, o, o, o, o), false},
+		{"triplets throughout", riff(x, x, x, x, x, x, x, x), true},
+		{"every other bar", riff(x, o, x, o, x, o, x, o), true},
+		{"one fill in sixteen bars", riff(o, o, o, o, o, o, o, x, o, o, o, o, o, o, o, o), false},
+	}
+	for _, tt := range tests {
+		sc := &score.Score{Bars: bars4(len(tt.riff.Bars), 120), Tracks: []score.Track{tt.riff}}
+		if got := slices.Contains(tagsOf(t, sc, rhythmGuitar, difficulty.Rhythm), "triplets"); got != tt.want {
+			t.Errorf("%s: triplets %v, want %v", tt.name, got, tt.want)
+		}
 	}
 }
 
