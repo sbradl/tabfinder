@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
+
+	"tabfinder/internal/score"
 )
 
 var gpVersionRe = regexp.MustCompile(`(\d)\.(\d+)`)
@@ -19,7 +22,7 @@ const (
 )
 
 // parseGP reads Guitar Pro 3, 4 and 5 binary files: header, track list and
-// the note data (walked only for tempo changes).
+// the note data.
 func parseGP(b []byte) (*Song, error) {
 	r := &reader{b: b}
 	ver := r.byteSizeString(30)
@@ -101,8 +104,11 @@ func parseGP(b []byte) (*Song, error) {
 		s.addTempo(1, float64(tempo))
 	}
 
+	notes := &score.Score{Bars: make([]score.Bar, 0, measures)}
+	prev := score.Bar{Num: 4, Den: 4}
 	for i := 0; i < measures && r.err == nil; i++ {
-		skipMeasureHeader(r, major, i)
+		prev = readMeasureHeader(r, major, i, prev)
+		notes.Bars = append(notes.Bars, prev)
 	}
 	stringCounts := make([]int, 0, tracks)
 	for i := 0; i < tracks && r.err == nil; i++ {
@@ -112,6 +118,7 @@ func parseGP(b []byte) (*Song, error) {
 		}
 		s.Tracks = append(s.Tracks, t)
 		stringCounts = append(stringCounts, strings)
+		notes.Tracks = append(notes.Tracks, score.Track{Drums: t.Drums, Bars: make([][]score.Beat, 0, measures)})
 	}
 	if major == 5 {
 		if minor == 0 {
@@ -123,7 +130,8 @@ func parseGP(b []byte) (*Song, error) {
 	if r.err != nil {
 		return s, r.err
 	}
-	if err := readGPMeasures(r, major, minor, measures, stringCounts, s); err != nil {
+	s.notes = notes
+	if err := readGPMeasures(r, major, minor, stringCounts, s); err != nil {
 		return s, fmt.Errorf("tempo changes incomplete: %w", err)
 	}
 	return s, nil
@@ -137,33 +145,42 @@ func skipLyrics(r *reader) {
 	}
 }
 
-func skipMeasureHeader(r *reader, major, index int) {
+// readMeasureHeader reads a bar's header; a time signature left out is the one of the bar before.
+func readMeasureHeader(r *reader, major, index int, prev score.Bar) score.Bar {
+	b := score.Bar{Num: prev.Num, Den: prev.Den}
 	if major == 5 && index > 0 {
 		r.skip(1)
 	}
 	f := r.u8()
 	if f&0x01 != 0 {
-		r.skip(1) // numerator
+		b.Num = r.u8()
 	}
 	if f&0x02 != 0 {
-		r.skip(1) // denominator
+		b.Den = r.u8()
 	}
+	b.RepeatOpen = f&0x04 != 0
 	if f&0x08 != 0 {
-		r.skip(1) // repeat close
+		b.Repeats = r.u8() // GP3/4: the times played again; GP5: the times played
+		if major == 5 {
+			b.Repeats--
+		}
+		b.Repeats = max(b.Repeats, 1)
 	}
 	if f&0x10 != 0 && major < 5 {
-		r.skip(1) // alternate ending (GP3/4 position)
+		if n := r.u8(); n >= 1 && n <= 8 { // GP3/4: the ending's number
+			b.Alternate = 1 << (n - 1)
+		}
 	}
 	if f&0x20 != 0 {
-		r.intByteSizeString() // marker name
-		r.skip(4)             // marker color
+		b.Marker = strings.TrimSpace(r.intByteSizeString())
+		r.skip(4) // marker color
 	}
 	if f&0x40 != 0 {
 		r.skip(2) // key signature
 	}
 	if major == 5 {
 		if f&0x10 != 0 {
-			r.skip(1) // alternate ending (GP5 position)
+			b.Alternate = r.u8() // GP5: a bit per ending
 		}
 		if f&0x03 != 0 {
 			r.skip(4) // beam groups
@@ -173,6 +190,7 @@ func skipMeasureHeader(r *reader, major, index int) {
 		}
 		r.skip(1) // triplet feel
 	}
+	return b
 }
 
 func readGPTrack(r *reader, major, minor, index int, programs *[64]int) (Track, int, error) {

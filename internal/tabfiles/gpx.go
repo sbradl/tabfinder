@@ -160,8 +160,13 @@ type GPIF6Track struct {
 	Pitches    string // space-separated MIDI notes, lowest string first
 }
 
-// GPIF6 builds a score.gpif the way Guitar Pro 6 writes it; tempos are {bar (0-based), bpm} pairs.
+// GPIF6 builds a score.gpif the way Guitar Pro 6 writes it, without notes; tempos are {bar (0-based), bpm} pairs.
 func GPIF6(title, artist, album string, tempos [][2]float64, tracks ...GPIF6Track) []byte {
+	return GPIF6Score(title, artist, album, tempos, nil, tracks...)
+}
+
+// GPIF6Score is GPIF6 with bars and notes. Note strings count from the highest, as in GPBar.
+func GPIF6Score(title, artist, album string, tempos [][2]float64, bars []GPBar, tracks ...GPIF6Track) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, `<?xml version="1.0" encoding="UTF-8"?><GPIF><GPVersion>6.1.4</GPVersion><Score><Title><![CDATA[%s]]></Title><Artist><![CDATA[%s]]></Artist><Album><![CDATA[%s]]></Album></Score><MasterTrack><Automations>`, title, artist, album)
 	for _, t := range tempos {
@@ -180,6 +185,16 @@ func GPIF6(title, artist, album string, tempos [][2]float64, tracks ...GPIF6Trac
 		}
 		b.WriteString(`</Track>`)
 	}
-	b.WriteString(`</Tracks><MasterBars/><Bars/></GPIF>`)
+	b.WriteString(`</Tracks>`)
+	if bars == nil {
+		b.WriteString(`<MasterBars/><Bars/></GPIF>`)
+		return []byte(b.String())
+	}
+	strs := make([]int, len(tracks))
+	for i, t := range tracks {
+		strs[i] = len(strings.Fields(t.Pitches))
+	}
+	gpifBars(&b, bars, strs, true)
+	b.WriteString(`</GPIF>`)
 	return []byte(b.String())
 }

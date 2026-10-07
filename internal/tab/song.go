@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"tabfinder/internal/score"
 )
 
 type Track struct {
@@ -72,6 +74,8 @@ type Song struct {
 	Tracks       []Track `json:"tracks,omitempty"`
 	Tempos       []Tempo `json:"tempos,omitempty"` // initial tempo first, then changes
 	Error        string  `json:"error,omitempty"`  // why the file couldn't be read, or only partly
+
+	notes *score.Score // while scanning: the notes read, if the format has them
 }
 
 // Unreadable reports whether nothing could be read from the file: a parse error before even
@@ -135,12 +139,54 @@ func IsTabExt(ext string) bool { return tabExts[strings.ToLower(ext)] }
 // Scan parses one file. It always returns a Song; parse problems are
 // reported in Song.Error and the path-based fallbacks are applied.
 func Scan(path, root string) *Song {
+	s := scan(path, root)
+	s.notes = nil
+	return s
+}
+
+// ReadNotes is Scan that also returns the file's notes: nil if its format has none
+// (TuxGuitar, Power Tab) or nothing could be read.
+func ReadNotes(path, root string) (*Song, *score.Score) {
+	s := scan(path, root)
+	notes := s.notes
+	s.notes = nil
+	if notes != nil {
+		for i := range notes.Bars {
+			notes.Bars[i].BPM = s.tempoAt(i + 1)
+		}
+	}
+	return s, notes
+}
+
+// tempoAt is the tempo at the start of a 1-based bar, 0 if unknown.
+func (s *Song) tempoAt(bar int) float64 {
+	bpm := 0.0
+	for _, t := range s.Tempos {
+		if t.Bar > bar {
+			break
+		}
+		bpm = t.BPM
+	}
+	return bpm
+}
+
+func scan(path, root string) *Song {
 	s, err := parseFile(path)
 	if s == nil {
 		s = &Song{}
 	}
 	if err != nil {
 		s.Error = err.Error()
+	}
+	if n := s.notes; n != nil { // a file cut short: the bars all tracks have
+		whole := len(n.Bars)
+		for _, t := range n.Tracks {
+			whole = min(whole, len(t.Bars))
+		}
+		n.Bars = n.Bars[:whole]
+		for i := range n.Tracks {
+			n.Tracks[i].Bars = n.Tracks[i].Bars[:whole]
+		}
 	}
 	rel, relErr := filepath.Rel(root, path)
 	if relErr != nil || strings.HasPrefix(rel, "..") {
