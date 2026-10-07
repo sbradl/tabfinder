@@ -1,0 +1,148 @@
+name: Release
+
+# Push a tag vX.Y.Z to publish a release. The tag must match tabfinderVersion in
+# android/gradle.properties, and CHANGELOG.md must have a "## [X.Y.Z]" section: it
+# becomes the release notes.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+# Versions match mise.toml.
+env:
+  GO_VERSION: "1.27"
+  JAVA_VERSION: "21"
+
+jobs:
+  check:
+    name: Check version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          app=$(sed -n 's/^tabfinderVersion=//p' android/gradle.properties)
+          [ "$version" = "$app" ] || { echo "::error::tag $GITHUB_REF_NAME, but tabfinderVersion is $app"; exit 1; }
+          grep -q "^## \[$version\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no [$version] section"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  android:
+    name: Android APK
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build tabscan for Android
+        run: go build -trimpath -ldflags="-s -w" -o android/app/src/main/jniLibs/arm64-v8a/libtabscan.so ./cmd/tabscan
+        env:
+          GOOS: android
+          GOARCH: arm64
+          CGO_ENABLED: "0"
+      - name: Build the APK
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          android/gradlew -p android assembleRelease -PtabfinderKeystore="$RUNNER_TEMP/release.jks"
+          rm "$RUNNER_TEMP/release.jks"
+        env:
+          KEYSTORE_BASE64: ${{ secrets.TABFINDER_KEYSTORE_BASE64 }}
+          ORG_GRADLE_PROJECT_tabfinderKeystorePassword: ${{ secrets.TABFINDER_KEYSTORE_PASSWORD }}
+      # Fail rather than publish an APK that can't update the installed app.
+      - name: Check the signing key
+        run: |
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs android/app/build/outputs/apk/release/app-release.apk \
+            | grep -qi "SHA-256 digest: $RELEASE_CERT_SHA256" || { echo "::error::the APK isn't signed with the release key"; exit 1; }
+          mkdir dist && cp android/app/build/outputs/apk/release/app-release.apk "dist/tabfinder-${{ needs.check.outputs.version }}.apk"
+        env:
+          RELEASE_CERT_SHA256: eec5eeffaa3bda71d5a414db4e984b96c654e354e761968b62d82fa4b27c1175
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android
+          path: dist
+
+  desktop:
+    name: Desktop app (Linux)
+    needs: check
+    # Pinned rather than ubuntu-latest: the binary needs at least this glibc.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install Gio dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc pkg-config libwayland-dev libx11-dev libx11-xcb-dev \
+            libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev
+      - name: Build
+        run: |
+          name="tabfinder-${{ needs.check.outputs.version }}-linux-amd64"
+          mkdir -p "$name" dist
+          go build -trimpath -ldflags="-s -w -X gioui.org/app.ID=dev.tabsync.tabfinder" -o "$name/tabfinder" ./cmd/tabfinder
+          cp cmd/tabfinder/install.sh cmd/tabfinder/tabfinder.svg cmd/tabfinder/fonts/*-OFL.txt "$name/"
+          tar -czf "dist/$name.tar.gz" "$name"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop
+          path: dist
+
+  cli:
+    name: CLI tools
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Build
+        run: |
+          mkdir dist
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            os="${target%/*}" arch="${target#*/}" ext=""
+            [ "$os" = windows ] && ext=.exe
+            name="tabfinder-cli-${{ needs.check.outputs.version }}-$os-$arch"
+            mkdir "$name"
+            for cmd in tabscan tabreorg; do
+              GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$name/$cmd$ext" "./cmd/$cmd"
+            done
+            if [ "$os" = windows ]; then zip -qr "dist/$name.zip" "$name"; else tar -czf "dist/$name.tar.gz" "$name"; fi
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cli
+          path: dist
+
+  release:
+    name: Publish
+    needs: [check, android, desktop, cli]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish the release
+        run: |
+          awk -v v="$VERSION" '/^## \[/ { on = index($0, "## [" v "]") == 1; next } /^\[[^]]*\]: / { exit } on' CHANGELOG.md > notes.md
+          (cd dist && sha256sum * > SHA256SUMS)
+          gh release create "$GITHUB_REF_NAME" --title "TabFinder $VERSION" --notes-file notes.md dist/*
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+          GH_TOKEN: ${{ github.token }}

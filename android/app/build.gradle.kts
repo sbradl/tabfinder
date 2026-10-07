@@ -4,6 +4,10 @@ plugins {
   alias(libs.plugins.kotlin.serialization)
 }
 
+// The release version, from gradle.properties; the release workflow checks the tag against it.
+val appVersion = providers.gradleProperty("tabfinderVersion").get()
+val (major, minor, patch) = appVersion.split(".").map { it.toInt() }
+
 android {
     namespace = "dev.tabsync.tabfinder"
     compileSdk = 36
@@ -12,11 +16,25 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = major * 10000 + minor * 100 + patch
+        versionName = appVersion
         // tabscan is built for arm64 (mise run bin). CI's x86_64 emulators get an x86_64 build instead
         // (-PtabscanAbis=x86_64, see .github/workflows/test.yml).
         ndk { abiFilters += providers.gradleProperty("tabscanAbis").getOrElse("arm64-v8a").split(",") }
+    }
+
+    // The release key, from ~/.gradle/gradle.properties locally and from secrets in the release
+    // workflow. Without it, release builds are signed with the debug key.
+    val keystore = providers.gradleProperty("tabfinderKeystore").orNull
+    signingConfigs {
+        if (keystore != null) {
+            create("release") {
+                storeFile = file(keystore)
+                storePassword = providers.gradleProperty("tabfinderKeystorePassword").get()
+                keyAlias = "tabfinder"
+                keyPassword = storePassword
+            }
+        }
     }
 
     buildTypes {
@@ -28,8 +46,8 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Sideloaded personal app: the debug key is enough. Debug builds scroll badly (no R8).
-            signingConfig = signingConfigs.getByName("debug")
+            // Debug builds scroll badly (no R8).
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
     compileOptions {

@@ -5,8 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-07
+
+First release.
+
 ### Added
 
+- Releases on GitHub: an Android APK signed with a release key, the Linux desktop app with
+  an install script, and `tabscan` and `tabreorg` for Linux, macOS and Windows.
 - Tab parsing (`internal/tab`) for Guitar Pro 3–7, TuxGuitar and Power Tab: artist, album,
   title, tracks, tunings and tempo changes. Falls back to the folder and file name when
   metadata is missing. Reads misnamed files, `.crdownload` files and single-tab `.zip`
@@ -34,3 +40,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A partly readable file is no longer reported as "couldn't read".
 - Errors from the folder dialog, a corrupt `config.json` and index writes are now
   reported instead of being ignored.
+
+[Unreleased]: https://github.com/sbradl/tabfinder/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/sbradl/tabfinder/releases/tag/v1.0.0
