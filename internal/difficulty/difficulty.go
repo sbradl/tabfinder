@@ -95,7 +95,7 @@ func Analyze(sc *score.Score, tracks []TrackInfo) []Part {
 				bars = append(bars, bar{i, b, head, sc.Tracks[i].Bars[b]})
 			}
 		}
-		p.Tags = tags(bars)
+		p.Tags = tags(r, bars)
 		out = append(out, p)
 	}
 	return out
@@ -108,9 +108,17 @@ type bar struct {
 	beats        []score.Beat
 }
 
-// tags is what makes a part with these bars hard.
-func tags(bars []bar) []string {
+// fastRate is the notes per second, by role, from which playing counts as fast: about
+// sixteenths at 135 BPM on bass and rhythm guitar. Drummers play sixteenth hi-hats at
+// rock tempos all the time.
+var fastRate = map[Role]float64{Drums: 12, Bass: 9, Rhythm: 9, Lead: 10}
+
+// tags is what makes a part of a role with these bars hard.
+func tags(r Role, bars []bar) []string {
 	var out []string
+	if often(bars, func(b bar) bool { return rate(b) >= fastRate[r] }) {
+		out = append(out, "fast")
+	}
 	if often(bars, func(b bar) bool { return oddMeter(b.head) }) {
 		out = append(out, "odd meter")
 	}
@@ -124,6 +132,31 @@ func tags(bars []bar) []string {
 		out = append(out, "tuplets")
 	}
 	return out
+}
+
+// rate is the notes per second played in a bar, counting notes struck together once.
+func rate(b bar) float64 {
+	onsets, last := 0, -1
+	for _, beat := range b.beats { // sorted by start
+		if beat.Struck() && beat.Start != last {
+			onsets++
+			last = beat.Start
+		}
+	}
+	return float64(onsets) / seconds(b.head)
+}
+
+// seconds is how long a bar takes; at 120 BPM if its tempo is unknown.
+func seconds(b score.Bar) float64 {
+	bpm := b.BPM
+	if bpm <= 0 {
+		bpm = 120
+	}
+	ticks := 4 * score.Quarter
+	if b.Num > 0 && b.Den > 0 {
+		ticks = b.Num * 4 * score.Quarter / b.Den
+	}
+	return float64(ticks) / score.Quarter * 60 / bpm
 }
 
 // oddMeter reports whether a bar is in an odd time signature: 5/4 or 7/8, but not 3/4 or

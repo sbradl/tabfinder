@@ -216,6 +216,54 @@ func TestTagMeters(t *testing.T) {
 	}
 }
 
+var (
+	kick, snare, hat = score.Note{Fret: 36}, score.Note{Fret: 38}, score.Note{Fret: 42}
+	drumKit          = []difficulty.TrackInfo{{Name: "Drums", Drums: true}}
+	bassGuitar       = []difficulty.TrackInfo{{Name: "Bass", Instrument: "Electric Bass (pick)", Pitches: bass4}}
+	leadGuitar       = []difficulty.TrackInfo{{Name: "Lead", Instrument: "Overdriven Guitar", Pitches: stdGuitar}}
+)
+
+// rockBeat is a bar of sixteenth hi-hats, kick on 1 and 3, snare on 2 and 4.
+func rockBeat() []score.Beat {
+	out := every(s, hat)
+	for i := range out {
+		switch out[i].Start {
+		case 0, 2 * q:
+			out[i].Notes = []score.Note{kick, hat}
+		case q, 3 * q:
+			out[i].Notes = []score.Note{snare, hat}
+		}
+	}
+	return out
+}
+
+func TestTagFast(t *testing.T) {
+	drums := func(bar []score.Beat) score.Track { return score.Track{Drums: true, Bars: track(8, bar).Bars} }
+	tests := []struct {
+		name  string
+		info  []difficulty.TrackInfo
+		role  difficulty.Role
+		track score.Track
+		bpm   float64
+		want  bool
+	}{
+		{"rhythm: 16ths at 160", rhythmGuitar, difficulty.Rhythm, track(8, every(s, powerChord...)), 160, true},
+		{"rhythm: 16ths at 100", rhythmGuitar, difficulty.Rhythm, track(8, every(s, powerChord...)), 100, false},
+		{"rhythm: 8ths at 200", rhythmGuitar, difficulty.Rhythm, track(8, every(e, powerChord...)), 200, false},
+		{"bass: 16ths at 160", bassGuitar, difficulty.Bass, track(8, every(s, score.Note{Fret: 0})), 160, true},
+		{"lead: 16ths at 150", leadGuitar, difficulty.Lead, track(8, melody(score.Bend)), 150, true},
+		{"lead: 16ths at 110", leadGuitar, difficulty.Lead, track(8, melody(score.Bend)), 110, false},
+		{"drums: 16th rock beat at 120", drumKit, difficulty.Drums, drums(rockBeat()), 120, false},
+		{"drums: 16th rock beat at 190", drumKit, difficulty.Drums, drums(rockBeat()), 190, true},
+	}
+	for _, tt := range tests {
+		sc := &score.Score{Bars: bars4(8, tt.bpm), Tracks: []score.Track{tt.track}}
+		if got := slices.Contains(tagsOf(t, sc, tt.info, tt.role), "fast"); got != tt.want {
+			t.Errorf("%s: fast %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 // melody is a bar of single sixteenth notes up and down the B and high E strings
 // around the 12th fret, with fx on every fourth note.
 func melody(fx score.Fx) []score.Beat {
