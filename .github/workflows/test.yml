@@ -124,16 +124,14 @@ jobs:
           # The default userdata partition needs more disk than the runner has free.
           disk-size: 2048M
           cores: 4
-          # The tests were written on a 1200x1920 tablet at 240 dpi; the default screen is too small to reach
-          # some of the rows and menu items they tap.
+          # The tablet's screen, 1200x1920 at 240 dpi, as in the JVM screen tests; the default one is too
+          # small to show the rows the tests tap.
           pre-emulator-launch-script: printf 'hw.lcd.width=1200\nhw.lcd.height=1920\nhw.lcd.density=240\n' >> ~/.android/avd/test.avd/config.ini
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: |
             adb shell settings put global hide_error_dialogs 1
             android/gradlew -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.timeout_msec=120000 || (adb logcat -d -v time > android/app/build/logcat.txt; exit 1)
-            android/gradlew -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.timeout_msec=120000 -Pandroid.testInstrumentationRunnerArguments.withoutAccess=true -Pandroid.testInstrumentationRunnerArguments.class=dev.tabsync.tabfinder.AccessAndScanTest#accessPromptWhenNothingIsGranted || (adb logcat -d -v time > android/app/build/logcat.txt; exit 1)
-            android/gradlew -p android installDebug
-            scripts/device-process-death.sh || (adb logcat -d -v time > android/app/build/logcat.txt; exit 1)
+            android/gradlew -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.timeout_msec=120000 -Pandroid.testInstrumentationRunnerArguments.withoutAccess=true -Pandroid.testInstrumentationRunnerArguments.class=dev.tabsync.tabfinder.AccessTest#accessPromptWhenNothingIsGranted || (adb logcat -d -v time > android/app/build/logcat.txt; exit 1)
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
@@ -141,4 +139,3 @@ jobs:
           path: |
             android/app/build/reports/androidTests
             android/app/build/logcat.txt
-            android/app/build/process-death.png

@@ -61,6 +61,14 @@ android {
       shaders = false
     }
 
+    // Robolectric runs the screen in the JVM tests; it needs the app's resources.
+    testOptions { unitTests { isIncludeAndroidResources = true } }
+    // The made-up tab library, shared by the JVM and the device tests.
+    sourceSets {
+        named("test") { kotlin.directories.add("src/sharedTest/java") }
+        named("androidTest") { kotlin.directories.add("src/sharedTest/java") }
+    }
+
     packaging {
       resources {
         excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -89,6 +97,8 @@ val buildHostTabscan by tasks.registering(Exec::class) {
 tasks.withType<Test>().configureEach {
     dependsOn(buildHostTabscan)
     systemProperty("tabscan.binary", hostTabscan.get().asFile.path)
+    // Robolectric reads FileDescriptor's internals.
+    jvmArgs("--add-opens=java.base/java.io=ALL-UNNAMED", "--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
 }
 
 dependencies {
@@ -115,9 +125,14 @@ dependencies {
   androidTestImplementation(libs.androidx.compose.ui.test.junit4)
   debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-  // Local tests: jUnit, coroutines, Android runner
+  // Local tests: jUnit, coroutines, and Robolectric for the screen
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
+  testImplementation(libs.robolectric)
+  testImplementation(composeBom)
+  testImplementation(libs.androidx.compose.ui.test.junit4)
+  testImplementation(libs.androidx.test.core)
+  testImplementation(libs.androidx.test.ext.junit)
 
   // Instrumented tests: jUnit rules and runners
   androidTestImplementation(libs.androidx.test.core)

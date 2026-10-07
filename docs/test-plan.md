@@ -236,6 +236,12 @@ Make these first, each in its own commit, with existing behavior unchanged.
   label == notes (custom), else the notes.
 - [x] U-SRV-04 Fuzz `serve` with random lines: no panic, one output line per
   input line.
+- [x] U-SRV-05 The Android app's filter and suggestion cases (E-AND-04, E-AND-05) over the
+  protocol, on the app tests' library (`appLibrary`, the same songs as `Fixture` in
+  `android/app/src/sharedTest`): each field alone, all together, without the tuning, an
+  invalid tempo range (all songs, `bpmInvalid`), no match, a picked tuning with its string
+  count and typed on without it; an artist suggested once whatever its spellings, a picked
+  artist's songs deciding the tunings, a tuning suggested with its string count.
 
 ### `cmd/tabreorg`
 
@@ -311,6 +317,22 @@ Make these first, each in its own commit, with existing behavior unchanged.
   "Scan failed: …"; search failure → message and empty results; fast input
   changes → only the last search's result is applied (`mapLatest`);
   `clearFilters` resets the query; `messageShown` clears the message.
+- [x] U-AND-07 The screen (`MainScreenTest`, Robolectric on the tablet's screen size) over the
+  real view model, `Finder` and host tabscan scanning `Fixture`: the access and folder prompts
+  and their buttons; the list with what tabscan worked out; each filter field alone and
+  cleared, all together, no matches cleared with "Clear filters"; picking an artist (field
+  filled, tunings trimmed) and a tuning (string count, dropped when typed on); fast typing;
+  tapping a song opens it and shows why it couldn't; a rotation (saved state restored, same
+  view model) keeps list and filters; after process death (new view model, saved state
+  restored) the saved scan is back without scanning; another folder replaces the list.
+- [x] U-AND-08 `TuxGuitar.open` (Robolectric): the intent (`ACTION_VIEW`, TuxGuitar's package,
+  read permission) with a FileProvider URI of a copy named `openAs` that has the original's
+  bytes; a song deleted after the scan → message, no intent; TuxGuitar not installed →
+  "TuxGuitar is not installed".
+- [x] U-AND-09 The folder picker's answer (`folderPicked`, Robolectric): a folder on the
+  device's storage becomes the tab folder and is scanned; one without a path → message;
+  none picked → nothing changes.
+- [x] U-AND-10 `listContent`: "No tabs found" by the library, not by a search still running.
 
 ## End-to-end scenarios
 
@@ -431,36 +453,37 @@ is drawn above the list).
 
 ### Android app (device tests, `android/app/src/androidTest`)
 
-Setup: push a fixture tab folder to the device (`/sdcard/TabFinderTest`), grant
-storage access (API 29: `pm grant … READ_EXTERNAL_STORAGE`; API 30+:
-`appops set … MANAGE_EXTERNAL_STORAGE allow`), and set the root through the
-preferences instead of the system folder picker, which tests can't drive
-reliably. Use Compose UI tests with the test tags from R3 and Espresso-Intents
-for TuxGuitar.
+Only what needs a device runs on one: Android's storage access (`AccessTest`) and one end-to-end
+pass through the bundled tabscan, the FileProvider and a restart (`SmokeTest`). The rest of each
+scenario is checked lower down, where it's faster and steadier: the matching in Go (U-SRV-05), the
+screen and the TuxGuitar hand-over on the JVM with Robolectric (U-AND-07 to U-AND-09). Each item
+below says where. The device tests write `Fixture` into the app's external files folder, grant
+storage access (API 29: the permission; API 30+: `appops set … MANAGE_EXTERNAL_STORAGE allow`) and
+set the folder through the preferences.
 
-- [x] E-AND-01 *(the no-access prompt runs on a fresh install with `withoutAccess=true`, see `mise run test-device`, tapping Allow in the system dialog on API 29; the API 30+ part, the button opening the all-files settings, runs in the same fresh-install run on CI's API 34 emulator: switching the access off from a test would kill the test's process)* No access → "Allow file access"; on API 29 the button requests
+- [x] E-AND-01 *(device: `AccessTest`; the prompts and their buttons: U-AND-07)* *(the no-access prompt runs on a fresh install with `withoutAccess=true`, see `mise run test-device`, tapping Allow in the system dialog on API 29; the API 30+ part, the button opening the all-files settings, runs in the same fresh-install run on CI's API 34 emulator: switching the access off from a test would kill the test's process)* No access → "Allow file access"; on API 29 the button requests
   `READ_EXTERNAL_STORAGE`; on API 30+ it opens the all-files settings screen
   (intent verified); after granting and returning, the folder prompt shows.
-- [x] E-AND-02 *(without the snackbar text: the Compose test clock runs ahead whenever the test waits, and holding it stops the app's recomposition too; the ViewModel test covers the text)* Folder set, no index → scan runs (`tabscan -serve` child process
+- [x] E-AND-02 *(device: `SmokeTest`; the list: U-AND-07; the snackbar text: U-AND-06)* Folder set, no index → scan runs (`tabscan -serve` child process
   exists), list appears, snackbar "N tabs, M unreadable".
-- [x] E-AND-03 Restart the app → list from the saved index without scanning.
-- [x] E-AND-04 Filters: same cases as E-DSK-10 to E-DSK-13, through the Go backend.
-- [x] E-AND-05 Suggestions: same cases as E-DSK-14 to E-DSK-19 (artist list,
+- [x] E-AND-03 *(device: `SmokeTest`; U-AND-07)* Restart the app → list from the saved index without scanning.
+- [x] E-AND-04 *(U-SRV-05 and U-AND-07; one search through the bundled tabscan in `SmokeTest`)* Filters: same cases as E-DSK-10 to E-DSK-13, through the Go backend.
+- [x] E-AND-05 *(U-SRV-05 and U-AND-07)* Suggestions: same cases as E-DSK-14 to E-DSK-19 (artist list,
   tuning headers, pick → badge, trimming by artist).
-- [x] E-AND-06 Fast typing (20 characters, no delay) → field text exactly as
+- [x] E-AND-06 *(U-AND-07)* Fast typing (20 characters, no delay) → field text exactly as
   typed, final result matches the last query (regression for the
   "Amber Marshamber" observation, which could not be reproduced).
-- [x] E-AND-07 *(the "not installed" case disables TuxGuitar for the test and enables it again after)* Tap a song → intent to `app.tuxguitar.android.application`,
+- [x] E-AND-07 *(device: `SmokeTest`; U-AND-08, with the "not installed" case)* Tap a song → intent to `app.tuxguitar.android.application`,
   `ACTION_VIEW`, read-permission flag, `content://dev.tabsync.tabfinder.files/…`
   URI whose file is named `openAs` and has the original's bytes. Without
   TuxGuitar installed → "TuxGuitar is not installed".
-- [x] E-AND-08 Song file deleted after the scan → tapping it shows an error
+- [x] E-AND-08 *(U-AND-08; the message on screen: U-AND-07)* Song file deleted after the scan → tapping it shows an error
   message, no crash.
-- [x] E-AND-09 Kill the tabscan child (`adb shell kill`) → next keystroke still
+- [x] E-AND-09 *(U-AND-02, which kills the real host tabscan between calls)* Kill the tabscan child (`adb shell kill`) → next keystroke still
   returns correct results (restart and replay).
-- [x] E-AND-10 *(rotation as a test; process death as `scripts/device-process-death.sh`: it kills the process in the background and checks the list is back and nothing crashed)* Rotation and process death (`adb shell am kill` in background) →
+- [x] E-AND-10 *(U-AND-07: a rotation keeps the view model and restores the saved state; process death brings a new view model and restores the saved state; the restart in `SmokeTest` reads the saved scan on a device)* Rotation and process death (`adb shell am kill` in background) →
   list and filters come back without errors.
-- [x] E-AND-11 Choose another folder (folder button with a stubbed picker
+- [x] E-AND-11 *(U-AND-09 and U-AND-07)* Choose another folder (folder button with a stubbed picker
   result) → old index dropped, new scan.
 - [ ] E-AND-12 *(`scripts/perf-device.sh`, written, not run: it drives your real release app)* Performance on the tablet: cold start to list < 1 s with a
   950-song index; scroll jank < 5% (`dumpsys gfxinfo`) on a release build
@@ -483,7 +506,7 @@ Bugs the tests found, all fixed (the tests were not changed to match):
 4. Android `Song`: `tunings`/`bpms` had no default, so `coerceInputValues` couldn't read a null as empty. Defaults added.
 
 Still open: E-AND-12 (`scripts/perf-device.sh` drives the real release app).
-Device tests pin the tablet to portrait (`DeviceTest`): auto-rotate had turned it to landscape mid-run, which hid song rows and shrank the suggestion menu, failing `pickingATuningSetsItsStringCount` and `aSongDeletedAfterTheScanShowsAnError` at random.
+Device tests pin the tablet to portrait (`DeviceTest`): auto-rotate had turned it to landscape mid-run, which hid song rows and shrank the suggestion menu, failing tests at random.
 
 Differences between this plan and the code, tests follow the code:
 

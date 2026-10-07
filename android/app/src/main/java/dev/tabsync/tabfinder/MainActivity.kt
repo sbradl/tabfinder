@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -57,10 +58,7 @@ private fun AndroidMainScreen() {
   }
   val requestRead = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { hasAccess = it }
   val pickFolder =
-    rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-      if (uri == null) return@rememberLauncherForActivityResult
-      Finder.treeToPath(uri)?.let(viewModel::setRoot) ?: viewModel.showMessage("Pick a folder on the device's storage")
-    }
+    rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { viewModel.folderPicked(it) }
 
   MainScreen(
     viewModel,
@@ -75,6 +73,12 @@ private fun AndroidMainScreen() {
       }
     },
   )
+}
+
+/** Takes the folder the picker answered with (null: none was picked); one without a file system path gets a message. */
+internal fun MainViewModel.folderPicked(uri: Uri?) {
+  if (uri == null) return
+  Finder.treeToPath(uri)?.let(::setRoot) ?: showMessage("Pick a folder on the device's storage")
 }
 
 /** All-files access on Android 11+; on 10, legacy storage makes plain read permission enough. */

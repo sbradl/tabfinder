@@ -41,9 +41,7 @@ description = "Device tests on the connected device (debug build, installed next
 run = [
   "android/gradlew -p android connectedDebugAndroidTest",
   # The no-access prompt needs an app without the storage permission: a fresh install, which the run above left behind by uninstalling.
-  "android/gradlew -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.withoutAccess=true -Pandroid.testInstrumentationRunnerArguments.class=dev.tabsync.tabfinder.AccessAndScanTest#accessPromptWhenNothingIsGranted",
-  "android/gradlew -p android installDebug",
-  "scripts/device-process-death.sh",
+  "android/gradlew -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.withoutAccess=true -Pandroid.testInstrumentationRunnerArguments.class=dev.tabsync.tabfinder.AccessTest#accessPromptWhenNothingIsGranted",
   "scripts/perf-device.sh",
 ]
 
