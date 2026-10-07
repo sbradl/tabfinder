@@ -137,18 +137,14 @@ fun MainScreen(
           )
           // Rows draw their own top divider, so the first one closes off the filter panel.
           if (state.scanning) LinearProgressIndicator(Modifier.fillMaxWidth())
-          val songs = results?.songs
-          if (songs == null) {
-            // Reading the cached index; takes a moment on a large library.
-          } else if (songs.isEmpty() && !state.scanning) {
-            if (input.active) {
-              Prompt("No tabs match", "Try fewer filters.", "Clear filters", Modifier.fillMaxSize(), viewModel::clearFilters)
-            } else {
+          when (listContent(results, state, input)) {
+            ListContent.LOADING -> {} // Reading the cached index; takes a moment on a large library.
+            ListContent.NO_TABS ->
               Prompt("No tabs found", "Rescan, or choose another folder.", "Rescan", Modifier.fillMaxSize(), viewModel::rescan)
-            }
-          } else {
-            SongList(
-              songs,
+            ListContent.NO_MATCHES ->
+              Prompt("No tabs match", "Try fewer filters.", "Clear filters", Modifier.fillMaxSize(), viewModel::clearFilters)
+            ListContent.SONGS -> SongList(
+              results!!.songs,
               onOpen = { song ->
                 val root = state.root!!
                 scope.launch { onOpen(root, song)?.let(viewModel::showMessage) }
@@ -159,6 +155,22 @@ fun MainScreen(
     }
   }
 }
+
+/** What the list below the filters shows. */
+internal enum class ListContent { LOADING, NO_TABS, NO_MATCHES, SONGS }
+
+/**
+ * "No tabs found" goes by the library, not by the last search: right after a scan, the results are
+ * those for the songs before it until the search for the new ones answers.
+ */
+internal fun listContent(results: Results?, state: MainUiState, input: Query): ListContent =
+  when {
+    results == null -> ListContent.LOADING
+    state.scanning -> ListContent.SONGS
+    state.songs.isEmpty() -> ListContent.NO_TABS
+    results.songs.isEmpty() && input.active -> ListContent.NO_MATCHES
+    else -> ListContent.SONGS
+  }
 
 @Composable
 private fun Prompt(title: String, text: String, action: String, modifier: Modifier = Modifier, onClick: () -> Unit) {

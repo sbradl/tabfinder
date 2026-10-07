@@ -6,6 +6,7 @@ import dev.tabsync.tabfinder.data.Query
 import dev.tabsync.tabfinder.data.SearchResult
 import dev.tabsync.tabfinder.data.Song
 import dev.tabsync.tabfinder.data.TabSource
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,7 +53,7 @@ class MainViewModel(private val finder: TabSource) : ViewModel() {
     combine(songsByPath, input) { songs, q -> songs to q }
       .mapLatest { (songs, q) ->
         if (songs == null) return@mapLatest null
-        val r = runCatching { finder.search(q) }.getOrElse {
+        val r = attempt { finder.search(q) }.getOrElse {
           showMessage("Search failed: ${it.message}")
           SearchResult()
         }
@@ -62,7 +63,7 @@ class MainViewModel(private val finder: TabSource) : ViewModel() {
 
   init {
     viewModelScope.launch {
-      val songs = runCatching { finder.load() }.getOrElse {
+      val songs = attempt { finder.load() }.getOrElse {
         showMessage("Couldn't read the saved scan: ${it.message}")
         emptyList()
       }
@@ -87,7 +88,7 @@ class MainViewModel(private val finder: TabSource) : ViewModel() {
     if (_state.value.scanning || _state.value.root == null) return
     _state.update { it.copy(scanning = true) }
     viewModelScope.launch {
-      val result = runCatching { finder.scan() }
+      val result = attempt { finder.scan() }
       _state.update { s ->
         result.fold(
           { r -> s.copy(songs = r.songs, scanning = false, message = r.warning ?: r.summary) },
@@ -101,3 +102,16 @@ class MainViewModel(private val finder: TabSource) : ViewModel() {
 
   fun messageShown() = _state.update { it.copy(message = null) }
 }
+
+/**
+ * [runCatching] for suspending calls: a cancellation isn't a failure but goes on, so a search that
+ * mapLatest drops for a newer one isn't reported as failed.
+ */
+private inline fun <T> attempt(block: () -> T): Result<T> =
+  try {
+    Result.success(block())
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Throwable) {
+    Result.failure(e)
+  }

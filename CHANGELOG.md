@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Android: the first scan of a folder no longer shows "Search failed: Child of the scoped
+  flow was cancelled". A search dropped for a newer one isn't a failure.
+- Android: right after a scan, the list no longer flashes "No tabs found" while the search
+  for the new songs is still running.
+
 ## [1.0.0] - 2026-10-07
 
 First release.

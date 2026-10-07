@@ -272,6 +272,23 @@ class MainViewModelTest {
   }
 
   @Test
+  fun `a search dropped for new songs isn't reported as failed`() = runTest(dispatcher) {
+    // A first start: nothing saved, so the folder is scanned, and the search that runs meanwhile
+    // is dropped when the scan's songs arrive.
+    val source = FakeSource("/tabs").apply {
+      scanGate = CompletableDeferred()
+      scanResult = Result.success(ScanResult(listOf(song("One")), summary = "1 tab"))
+      searchDelays = { 100 }
+    }
+    val vm = vm(source)
+    advanceTimeBy(10)
+    source.scanGate!!.complete(Unit)
+    advanceUntilIdle()
+    assertEquals("1 tab", vm.state.value.message)
+    assertEquals(listOf("One"), vm.results.value!!.songs.map { it.title })
+  }
+
+  @Test
   fun `the songs a search matched are looked up by path, ignoring unknown ones`() = runTest(dispatcher) {
     val source = FakeSource("/tabs").apply {
       saved = listOf(song("One"), song("Two"))
