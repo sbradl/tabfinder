@@ -116,7 +116,9 @@ jobs:
         timeout-minutes: 25
         with:
           api-level: ${{ matrix.api-level }}
-          target: google_apis
+          # Plain AOSP: no Pixel Launcher or Google services in the background, which on the slow
+          # emulator stopped responding and put their dialogs over the app.
+          target: default
           arch: x86_64
           disable-animations: true
           # The default userdata partition needs more disk than the runner has free.
@@ -127,6 +129,7 @@ jobs:
           pre-emulator-launch-script: printf 'hw.lcd.width=1200\nhw.lcd.height=1920\nhw.lcd.density=240\n' >> ~/.android/avd/test.avd/config.ini
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: |
+            adb shell settings put global hide_error_dialogs 1
             android/gradlew -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.timeout_msec=120000 || (adb logcat -d -v time > android/app/build/logcat.txt; exit 1)
             android/gradlew -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.timeout_msec=120000 -Pandroid.testInstrumentationRunnerArguments.withoutAccess=true -Pandroid.testInstrumentationRunnerArguments.class=dev.tabsync.tabfinder.AccessAndScanTest#accessPromptWhenNothingIsGranted || (adb logcat -d -v time > android/app/build/logcat.txt; exit 1)
             android/gradlew -p android installDebug
