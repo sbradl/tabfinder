@@ -14,8 +14,9 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
-        // tabscan is only built for arm64 (mise run bin).
-        ndk { abiFilters += "arm64-v8a" }
+        // tabscan is built for arm64 (mise run bin). CI's x86_64 emulators get an x86_64 build instead
+        // (-PtabscanAbis=x86_64, see .github/workflows/test.yml).
+        ndk { abiFilters += providers.gradleProperty("tabscanAbis").getOrElse("arm64-v8a").split(",") }
     }
 
     buildTypes {

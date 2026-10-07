@@ -2,6 +2,6 @@
 /tabscan
 /tabreorg
 /cmd/tabfinder/tabfinder
-/android/app/src/main/jniLibs/arm64-v8a/libtabscan.so
+/android/app/src/main/jniLibs/*/libtabscan.so
 /cmd/tabreorg/tabreorg
 /cmd/tabscan/tabscan

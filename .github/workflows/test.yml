@@ -1,0 +1,123 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Versions match mise.toml.
+env:
+  GO_VERSION: "1.27"
+  JAVA_VERSION: "21"
+
+jobs:
+  go:
+    name: Go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      # Gio's build dependencies, plus Mesa and Xvfb so the desktop UI tests render offscreen
+      # (software EGL) instead of skipping their pixel checks and screenshots.
+      - name: Install Gio dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc pkg-config libwayland-dev libx11-dev libx11-xcb-dev \
+            libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev \
+            libgl1-mesa-dri xvfb xauth
+      - name: Test
+        run: xvfb-run -a go test -race ./...
+        env:
+          TABFINDER_SHOTS: ${{ runner.temp }}/shots
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: desktop-screenshots
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: ignore
+
+  android-unit:
+    name: Android JVM tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # The JVM tests run the host build of tabscan (see android/app/build.gradle.kts).
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Test
+        run: android/gradlew -p android testDebugUnitTest
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: android-unit-reports
+          path: android/app/build/reports/tests
+
+  android-device:
+    name: Android device tests (API ${{ matrix.api-level }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # The tablet is API 29; API 34 covers the all-files access of Android 11+.
+        api-level: [29, 34]
+    env:
+      # x86_64 emulators run an x86_64 tabscan, not the arm64 one through translation.
+      ORG_GRADLE_PROJECT_tabscanAbis: x86_64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build tabscan for the emulator
+        run: go build -trimpath -ldflags="-s -w" -o android/app/src/main/jniLibs/x86_64/libtabscan.so ./cmd/tabscan
+        env:
+          GOOS: android
+          GOARCH: amd64
+          CGO_ENABLED: "0"
+      # Build before the emulator starts, so it runs only for the tests.
+      - name: Build the app and tests
+        run: android/gradlew -p android assembleDebug assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # The steps of `mise run test-device`, without the performance check: that needs the real
+      # library on a real device. Each script line runs on its own.
+      - name: Test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: |
+            android/gradlew -p android connectedDebugAndroidTest
+            android/gradlew -p android connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.withoutAccess=true -Pandroid.testInstrumentationRunnerArguments.class=dev.tabsync.tabfinder.AccessAndScanTest#accessPromptWhenNothingIsGranted
+            android/gradlew -p android installDebug
+            scripts/device-process-death.sh
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: android-device-reports-api${{ matrix.api-level }}
+          path: android/app/build/reports/androidTests
