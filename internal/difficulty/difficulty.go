@@ -127,6 +127,14 @@ func tags(r Role, bars []bar) []string {
 	if often(bars, func(b bar) bool { return syncopated(b, r == Drums) }) {
 		out = append(out, "syncopated")
 	}
+	if r == Drums {
+		if often(bars, doubleKick) {
+			out = append(out, "double kick")
+		}
+		if often(bars, blastBeat) {
+			out = append(out, "blast beats")
+		}
+	}
 	if often(bars, func(b bar) bool { return oddMeter(b.head) }) {
 		out = append(out, "odd meter")
 	}
@@ -204,6 +212,50 @@ func syncopated(b bar, drums bool) bool {
 		}
 	}
 	return syncopes > 0 && 4*syncopes >= len(onsets)
+}
+
+// hits is the times a drum is hit in a bar, each once (voices may double a hit).
+func hits(b bar, drum func(midi int) bool) []int {
+	var out []int
+	for _, beat := range b.beats { // sorted by start
+		if len(out) > 0 && out[len(out)-1] == beat.Start {
+			continue
+		}
+		for _, n := range beat.Notes {
+			if !n.Tie && drum(n.Fret) {
+				out = append(out, beat.Start)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// doubleKick reports whether a bar has a run of six kicks, each less than 0.13 s after the
+// one before: more than one foot plays.
+func doubleKick(b bar) bool {
+	const gap, run = 0.13, 6
+	tick := seconds(b.head) / float64(barTicks(b.head))
+	n, last := 0, 0
+	for _, t := range hits(b, isKick) {
+		if n > 0 && float64(t-last)*tick < gap {
+			n++
+		} else {
+			n = 1
+		}
+		if n >= run {
+			return true
+		}
+		last = t
+	}
+	return false
+}
+
+// blastBeat reports whether kick and snare are both hit at least six times a second in a bar.
+func blastBeat(b bar) bool {
+	const perSecond = 6
+	secs := seconds(b.head)
+	return float64(len(hits(b, isKick))) >= perSecond*secs && float64(len(hits(b, isSnare))) >= perSecond*secs
 }
 
 func isKick(midi int) bool  { return midi == 35 || midi == 36 }
