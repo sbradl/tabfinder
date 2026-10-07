@@ -5,6 +5,7 @@ package difficulty
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"tabfinder/internal/score"
@@ -80,14 +81,56 @@ func Analyze(sc *score.Score, tracks []TrackInfo) []Part {
 			continue
 		}
 		p := Part{Role: r}
+		var bars []bar
 		for i := range tracks {
 			if len(played[r][i]) > 0 {
 				p.Tracks = append(p.Tracks, i)
 			}
+			for _, b := range played[r][i] {
+				bars = append(bars, bar{i, b, sc.Tracks[i].Bars[b]})
+			}
 		}
+		p.Tags = tags(bars)
 		out = append(out, p)
 	}
 	return out
+}
+
+// bar is a bar a part is played in on one of its tracks.
+type bar struct {
+	track, index int
+	beats        []score.Beat
+}
+
+// tags is what makes a part with these bars hard.
+func tags(bars []bar) []string {
+	var out []string
+	if often(bars, func(b bar) bool { return hasTuplet(b.beats, 3, 6) }) {
+		out = append(out, "triplets")
+	}
+	return out
+}
+
+// often reports whether bars with something come up in a part more than once or twice:
+// in at least two bars and every eighth.
+func often(bars []bar, has func(bar) bool) bool {
+	n := 0
+	for _, b := range bars {
+		if has(b) {
+			n++
+		}
+	}
+	return n >= 2 && 8*n >= len(bars)
+}
+
+// hasTuplet reports whether a beat struck is an n:m tuplet with one of these n.
+func hasTuplet(beats []score.Beat, ns ...int) bool {
+	for _, b := range beats {
+		if b.Struck() && slices.Contains(ns, b.Tuplet) {
+			return true
+		}
+	}
+	return false
 }
 
 // struck reports whether any of the beats strikes a note.
