@@ -107,6 +107,47 @@ class FinderTest {
     assertEquals(listOf("Amber Marsh"), b.finder.search(Query(artist = "amber")).artists)
   }
 
+  // A saved scan of songs with parts: what a scan of Guitar Pro files with notes writes.
+  private fun ratedIndex(b: Backend) {
+    fun song(title: String, vararg parts: String) =
+      """{"path":"Copper Wolves/$title.gp5","format":"gp5","artist":"Copper Wolves","title":"$title","parts":[${parts.joinToString(",")}]}"""
+    fun part(role: String, score: Double, vararg tags: String) =
+      """{"role":"$role","tracks":[0],"score":$score,"tags":[${tags.joinToString(",") { "\"$it\"" }}]}"""
+    b.index.writeText(
+      listOf(
+          """{"tabfinderIndex":3}""",
+          song("Anvil", part("drums", 2.2), part("rhythm", 4.6, "syncopated")),
+          song("Bellows", part("drums", 7.8, "double kick"), part("rhythm", 6.4, "fast"), part("lead", 9.1, "bends")),
+          song("Cinder", part("rhythm", 7.0)),
+          """{"path":"Copper Wolves/Dross.tg","format":"tg","artist":"Copper Wolves","title":"Dross"}""",
+        )
+        .joinToString("\n", postfix = "\n")
+    )
+  }
+
+  @Test
+  fun `songs come with their parts`() = runBlocking {
+    val b = Backend(tmp)
+    ratedIndex(b)
+    val songs = b.finder.load().associateBy { it.title }
+    assertEquals(listOf(Part("drums", 8, listOf("double kick")), Part("rhythm", 6, listOf("fast")), Part("lead", 9, listOf("bends"))), songs.getValue("Bellows").parts)
+    assertEquals(emptyList<Part>(), songs.getValue("Dross").parts)
+  }
+
+  @Test
+  fun `search by the levels of parts, in order of difficulty`() = runBlocking {
+    val b = Backend(tmp)
+    ratedIndex(b)
+    val titles = b.finder.load().associate { it.path to it.title }
+    suspend fun search(q: Query) = b.finder.search(q).matches.map { titles.getValue(it) }
+    assertEquals(listOf("Anvil", "Bellows", "Cinder"), search(Query(rhythm = "1-10"))) // songs with a rhythm part
+    assertEquals(listOf("Bellows", "Cinder"), search(Query(rhythm = "6-7")))
+    assertEquals(listOf("Cinder", "Bellows"), search(Query(rhythm = "6-7", sort = Sort.HARDEST)))
+    assertEquals(listOf("Anvil"), search(Query(drums = "-3")))
+    assertEquals(listOf("Bellows"), search(Query(drums = "5-", lead = "9")))
+    assertEquals(listOf("Anvil", "Cinder", "Bellows", "Dross"), search(Query(sort = Sort.EASIEST)))
+  }
+
   @Test
   fun `search after load uses the loaded songs`() = runBlocking {
     val b = Backend(tmp)

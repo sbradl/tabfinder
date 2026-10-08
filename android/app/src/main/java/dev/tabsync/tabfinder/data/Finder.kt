@@ -38,13 +38,41 @@ data class Song(
   val subtitle: String = "", // "artist · album", leaving out what's missing
   val tempo: String = "", // the opening tempo, shown large; empty for none
   val tempoDetail: String = "", // under it: "BPM", or the tempo changes that follow
+  val parts: List<Part> = emptyList(), // drums, bass, rhythm, lead: those played
 )
 
-/** The filter fields as typed. [strings] is set by picking a tuning suggestion. */
+/** How hard what a [role] ("drums", "bass", "rhythm", "lead") plays in a song is: [level] 1 to 10. */
+@Serializable data class Part(val role: String, val level: Int, val tags: List<String> = emptyList())
+
+/** The order of the songs found. */
 @Serializable
-data class Query(val name: String = "", val artist: String = "", val tuning: String = "", val bpm: String = "", val strings: Int = 0) {
+enum class Sort {
+  @SerialName("") AZ, // by artist, then title
+  @SerialName("easiest") EASIEST, // by the hardest part searched for (any if none), easiest first
+  @SerialName("hardest") HARDEST,
+}
+
+/**
+ * The filter fields as typed. [strings] is set by picking a tuning suggestion. [drums], [bass], [rhythm]
+ * and [lead] are ranges of levels ("5-7"), each asking for that part; [sort] is no filter.
+ */
+@Serializable
+data class Query(
+  val name: String = "",
+  val artist: String = "",
+  val tuning: String = "",
+  val bpm: String = "",
+  val strings: Int = 0,
+  val drums: String = "",
+  val bass: String = "",
+  val rhythm: String = "",
+  val lead: String = "",
+  val sort: Sort = Sort.AZ,
+) {
   val active: Boolean
-    get() = name.isNotEmpty() || artist.isNotEmpty() || tuning.isNotEmpty() || bpm.isNotEmpty() || strings != 0
+    get() =
+      name.isNotEmpty() || artist.isNotEmpty() || tuning.isNotEmpty() || bpm.isNotEmpty() || strings != 0 ||
+        drums.isNotEmpty() || bass.isNotEmpty() || rhythm.isNotEmpty() || lead.isNotEmpty()
 }
 
 @Serializable

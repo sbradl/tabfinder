@@ -21,6 +21,15 @@ class QueryTest {
     assertTrue(Query(tuning = "a").active)
     assertTrue(Query(bpm = "1").active)
     assertTrue(Query(strings = 6).active)
+    assertTrue(Query(drums = "1-3").active)
+    assertTrue(Query(bass = "5").active)
+    assertTrue(Query(rhythm = "5-7").active)
+    assertTrue(Query(lead = "8-").active)
+  }
+
+  @Test
+  fun `the order is no filter`() {
+    assertFalse(Query(sort = Sort.HARDEST).active)
   }
 
   @Test
