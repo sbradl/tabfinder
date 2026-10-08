@@ -77,13 +77,28 @@ func TestScorePickingHand(t *testing.T) {
 	harder(t, "hammer-ons and pull-offs, the same picked", scoreBar(line(score.Legato, notes...)), scoreBar(line(0, notes...)))
 }
 
+// gripPerBeat is a bar of sixteenths on the two lowest strings: for each beat, the two
+// frets in turn.
+func gripPerBeat(frets ...[2]int) []score.Beat {
+	var out []score.Beat
+	for k, f := range frets {
+		for i := range 4 {
+			out = append(out, score.Beat{Start: k*q + i*s, Dur: s, Notes: []score.Note{{String: i % 2, Fret: f[i%2]}}})
+		}
+	}
+	return out
+}
+
 func TestScoreStretches(t *testing.T) {
 	scoreBar := func(bar []score.Beat) float64 {
 		return scoreOf(t, track(16, bar).Bars, 120, rhythmGuitar, difficulty.Rhythm)
 	}
-	easy := line(0, [2]int{0, 3}, [2]int{1, 5}) // on the low strings, as fast, as many changes
-	wide := line(0, [2]int{0, 3}, [2]int{1, 7})
-	harder(t, "a riff in one position, the same with a stretch", scoreBar(easy), scoreBar(wide))
+	// A stretch held over the bar is little work for the fretting hand; one grip after the
+	// other is more, and one stretch after the other more still.
+	held := gripPerBeat([2]int{3, 7}, [2]int{3, 7}, [2]int{3, 7}, [2]int{3, 7})
+	moving := gripPerBeat([2]int{3, 5}, [2]int{4, 6}, [2]int{5, 7}, [2]int{6, 8})
+	stretching := gripPerBeat([2]int{3, 7}, [2]int{4, 8}, [2]int{5, 9}, [2]int{6, 10})
+	harder(t, "a stretch held, grips changing, stretches changing", scoreBar(held), scoreBar(moving), scoreBar(stretching))
 }
 
 func TestScoreRhythm(t *testing.T) {

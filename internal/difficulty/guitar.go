@@ -72,7 +72,7 @@ func (g *grip) strain() float64 {
 
 // stretched reports whether a grip is a stretch: four frets or more (one finger per fret
 // spans three) and a strain of a stretch.
-func (g *grip) stretched() bool { return g.hi-g.lo >= 4 && g.strain() >= stretchReach }
+func (g *grip) stretched() bool { return g != nil && g.hi-g.lo >= 4 && g.strain() >= stretchReach }
 
 // fretted reports whether a note needs a finger: struck, not open.
 func fretted(n score.Note) bool { return !n.Tie && !n.Dead && n.Fret > 0 }
@@ -81,31 +81,45 @@ func fretted(n score.Note) bool { return !n.Tie && !n.Dead && n.Fret > 0 }
 // within a quarter note, where the hand has no time to move.
 func grips(b bar) []*grip {
 	var out []*grip
-	quarters := map[int]*grip{}
-	nStrings := len(b.info.Pitches)
 	for _, beat := range b.beats {
-		chord := &grip{nStrings: nStrings}
+		chord := &grip{nStrings: len(b.info.Pitches)}
 		for _, n := range beat.Notes {
-			if !fretted(n) {
-				continue
+			if fretted(n) {
+				chord.add(n)
 			}
-			chord.add(n)
-			k := beat.Start / score.Quarter
-			if quarters[k] == nil {
-				quarters[k] = &grip{nStrings: nStrings}
-			}
-			quarters[k].add(n)
 		}
 		if chord.strings != nil {
 			out = append(out, chord)
 		}
 	}
-	for _, g := range quarters {
-		if len(g.strings) >= 2 {
-			out = append(out, g)
-		}
+	for _, g := range quarterGrips(b) {
+		out = append(out, g)
 	}
 	return out
+}
+
+// quarterGrips is the grips of fretted notes on different strings within each quarter note
+// of a bar, by quarter.
+func quarterGrips(b bar) map[int]*grip {
+	quarters := map[int]*grip{}
+	for _, beat := range b.beats {
+		for _, n := range beat.Notes {
+			if !fretted(n) {
+				continue
+			}
+			k := beat.Start / score.Quarter
+			if quarters[k] == nil {
+				quarters[k] = &grip{nStrings: len(b.info.Pitches)}
+			}
+			quarters[k].add(n)
+		}
+	}
+	for k, g := range quarters {
+		if len(g.strings) < 2 {
+			delete(quarters, k)
+		}
+	}
+	return quarters
 }
 
 // stretches reports whether a bar asks for a stretch of the fretting hand.

@@ -7,11 +7,26 @@ import (
 	"tabfinder/internal/score"
 )
 
-// rating is how hard a part is on a scale of 1 to 10, rounded to a tenth: mostly how fast
-// it is, plus what else it asks for. plays is how often each bar of the song is played.
+// rating is how hard a part is on a scale of 1 to 10, rounded to a tenth: mostly what it
+// asks of either hand, plus its rhythm and how much there is to learn. plays is how often
+// each bar of the song is played.
 func rating(r Role, bars []bar, plays []int) float64 {
-	hard := speed(bars) + 0.3*stretchiness(r, bars) + 0.15*rhythmic(r, bars) + 0.15*learning(bars, plays)
+	hands := either(pickingHand(bars), frettingHand(bars))
+	hard := hands + 0.15*rhythmic(r, bars) + 0.15*learning(bars, plays)
 	return math.Round((1+9*clamp(hard))*10) / 10
+}
+
+// pickingHand is how hard a part is for the picking hand, from 0 for a strike every few
+// seconds to 1 for 16 a second: what it keeps up for a while, the 90th percentile of its bars.
+func pickingHand(bars []bar) float64 {
+	return scale(percentile(bars, 0.9, picksPerSecond), 2, 16)
+}
+
+// frettingHand is how hard a part is for the fretting hand, from 0 to 1 for 10 grips a
+// second, a stretch counting double: what it keeps up for a while, the 90th percentile of
+// its bars. A stretch held over many strokes costs once; stretch after stretch, each time.
+func frettingHand(bars []bar) float64 {
+	return scale(percentile(bars, 0.9, gripsPerSecond), 1, 10)
 }
 
 // learning is how much there is to learn of a part, from 0 for up to 8 different bars to 1
@@ -32,29 +47,12 @@ func rhythmic(r Role, bars []bar) float64 {
 	return clamp(0.4*odd + 0.4*changes + 0.4*synco + 0.5*poly + 0.3*tuplets)
 }
 
-// stretchiness is how much a part stretches the fretting hand, from 0 to 1 for a stretch in
-// half the bars or more. Drums have none.
-func stretchiness(r Role, bars []bar) float64 {
-	if r == Drums {
-		return 0
-	}
-	return scale(share(bars, stretches), 0, 0.5)
-}
-
 // share is the share of bars with something.
 func share(bars []bar, has func(bar) bool) float64 {
 	if len(bars) == 0 {
 		return 0
 	}
 	return float64(count(bars, has)) / float64(len(bars))
-}
-
-// speed is how fast a part is for either hand, from 0 to 1: what each keeps up for a while,
-// the 90th percentile of its bars. Either hand alone can make a part hard; both, harder.
-func speed(bars []bar) float64 {
-	picking := scale(percentile(bars, 0.9, picksPerSecond), 2, 16)
-	fretting := scale(percentile(bars, 0.9, changesPerSecond), 1, 10)
-	return either(picking, fretting)
 }
 
 // picksPerSecond is how often the picking hand strikes in a bar: notes struck together
@@ -88,13 +86,14 @@ func unpicked(beat score.Beat) bool {
 	return true
 }
 
-// changesPerSecond is how often the fretting hand puts a finger down in a bar: beats with a
+// gripsPerSecond is how often the fretting hand puts fingers down in a bar: beats with a
 // fretted note not played within the quarter note before, where a finger may still be.
-// Open strings and repeated notes are free.
-func changesPerSecond(b bar) float64 {
+// Open strings and repeated notes are free; a stretch counts double.
+func gripsPerSecond(b bar) float64 {
 	type finger struct{ string, fret int }
 	lastPlayed := map[finger]int{} // when
-	changes := 0
+	quarters := quarterGrips(b)
+	grips := 0
 	for _, beat := range b.beats {
 		changed := false
 		for _, n := range beat.Notes {
@@ -107,11 +106,15 @@ func changesPerSecond(b bar) float64 {
 			}
 			lastPlayed[f] = beat.Start
 		}
-		if changed {
-			changes++
+		switch {
+		case !changed:
+		case quarters[beat.Start/score.Quarter].stretched():
+			grips += 2
+		default:
+			grips++
 		}
 	}
-	return float64(changes) / b.seconds()
+	return float64(grips) / b.seconds()
 }
 
 // either combines two measures of 0 to 1 so that each alone can reach 1.
