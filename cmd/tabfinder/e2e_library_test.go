@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"tabfinder/internal/finder"
 	"tabfinder/internal/tabfiles"
 	"tabfinder/internal/testlib"
 )
@@ -83,7 +84,7 @@ func TestFirstRunChoosesFolder(t *testing.T) {
 		t.Errorf("config.json = %s", b)
 	}
 	// The old index is gone, the new scan is cached.
-	if b, _ := os.ReadFile(oldIndex); strings.Contains(string(b), "Soilbed Quartet/Brass Kettle.gp5") || strings.Count(string(b), "\n") != 20 {
+	if b, _ := os.ReadFile(oldIndex); strings.Contains(string(b), "Soilbed Quartet/Brass Kettle.gp5") || strings.Count(string(b), "\n") != 21 { // the header, 20 songs
 		t.Errorf("index has %d lines, or still the old content", strings.Count(string(b), "\n"))
 	}
 	m := reScanned.FindStringSubmatch(h.u.message)
@@ -212,7 +213,7 @@ func TestEmptyFolder(t *testing.T) {
 // E-DSK-08
 func TestCorruptIndex(t *testing.T) {
 	root, release := blockedTree(t) // keeps the automatic rescan from replacing the message at once
-	h := newHarnessWith(t, harnessOpts{root: &root, index: str("{\"path\":\"a\"}\nthis is not json\n")})
+	h := newHarnessWith(t, harnessOpts{root: &root, index: str(finder.IndexHeader + "\n{\"path\":\"a\"}\nthis is not json\n")})
 	if !strings.HasPrefix(h.u.message, "Couldn't read the saved scan") {
 		t.Errorf("message = %q", h.u.message)
 	}
@@ -250,7 +251,7 @@ func TestRescanButton(t *testing.T) {
 		t.Errorf("subtitle = %q", got)
 	}
 	// The scan is cached for the next start.
-	if b, _ := os.ReadFile(h.u.dirs.index()); strings.Count(string(b), "\n") != 20 {
+	if b, _ := os.ReadFile(h.u.dirs.index()); strings.Count(string(b), "\n") != 21 { // the header, 20 songs
 		t.Errorf("index has %d lines", strings.Count(string(b), "\n"))
 	}
 	// A scan of a folder that is gone says so and keeps the list.

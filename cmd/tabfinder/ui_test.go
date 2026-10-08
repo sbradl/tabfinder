@@ -182,7 +182,8 @@ func (h *harness) shot(name string) {
 	png.Encode(f, img)
 }
 
-const sampleIndex = `{"path":"Soilbed Quartet/Brass Kettle.gp5","format":"gp5","artist":"Soilbed Quartet","title":"Brass Kettle","tracks":[{"name":"G","pitches":[36,43,48,53,57,62],"tuning":"Drop C (C G C F A D)"},{"name":"B","pitches":[24,31,36,41],"tuning":"Drop C (C G C F)"}],"tempos":[{"bar":1,"bpm":190},{"bar":91,"bpm":145}]}
+const sampleIndex = `{"tabfinderIndex":2}
+{"path":"Soilbed Quartet/Brass Kettle.gp5","format":"gp5","artist":"Soilbed Quartet","title":"Brass Kettle","tracks":[{"name":"G","pitches":[36,43,48,53,57,62],"tuning":"Drop C (C G C F A D)"},{"name":"B","pitches":[24,31,36,41],"tuning":"Drop C (C G C F)"}],"tempos":[{"bar":1,"bpm":190},{"bar":91,"bpm":145}]}
 {"path":"Amber Marsh/First Frost.gp5","format":"gp5","artist":"Amber Marsh","title":"First Frost","tracks":[{"name":"G","pitches":[38,45,50,55,59,64],"tuning":"D Standard (D G C F A D)"},{"name":"G2","pitches":[35,40,45,50,55,59],"tuning":"Custom (B E A D G B)"}],"tempos":[{"bar":1,"bpm":189}]}
 {"path":"Amber Marsh/Raise Your Lanterns.gp5","format":"gp5","artist":"Amber Marsh","title":"Raise Your Lanterns","tracks":[{"name":"G","pitches":[33,40,45,50,54,59],"tuning":"Drop A (A E A D F# B)"}],"tempos":[{"bar":1,"bpm":110}]}
 {"path":"Inkwell Flamingos/Mirage.gp5","format":"gp5","artist":"Inkwell Flamingos","title":"Mirage","tracks":[{"name":"G","pitches":[35,40,45,50,55,59,64],"tuning":"B Standard (B E A D G B E)"}],"tempos":[{"bar":1,"bpm":120}]}

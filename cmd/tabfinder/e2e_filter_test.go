@@ -23,6 +23,7 @@ import (
 // indexOf is songs as the cached index file has them.
 func indexOf(songs []*tab.Song) *string {
 	var buf bytes.Buffer
+	buf.WriteString(finder.IndexHeader + "\n")
 	for _, s := range songs {
 		b, _ := json.Marshal(s)
 		buf.Write(b)

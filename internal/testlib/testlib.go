@@ -66,6 +66,7 @@ func Songs() []*tab.Song {
 func WriteIndex(t testing.TB, path string, songs []*tab.Song) {
 	t.Helper()
 	var buf bytes.Buffer
+	buf.WriteString(`{"tabfinderIndex":2}` + "\n") // finder.IndexHeader; finder's tests import testlib
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	for _, s := range songs {

@@ -87,7 +87,7 @@ func TestServeRequests(t *testing.T) {
 	})
 	t.Run("load of a malformed index", func(t *testing.T) {
 		bad := filepath.Join(dir, "bad.jsonl")
-		os.WriteFile(bad, []byte("{\"path\":\"a\"}\nnope\n"), 0o644)
+		os.WriteFile(bad, []byte(finder.IndexHeader+"\n{\"path\":\"a\"}\nnope\n"), 0o644)
 		r := session(t, req(map[string]any{"op": "load", "index": bad}), req(map[string]any{"op": "search", "query": map[string]any{}}))
 		if _, ok := r[0]["error"].(string); !ok {
 			t.Errorf("response = %v", r[0])

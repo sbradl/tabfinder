@@ -7,11 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"tabfinder/internal/finder"
 )
 
 func TestServe(t *testing.T) {
 	index := filepath.Join(t.TempDir(), "index.jsonl")
-	os.WriteFile(index, []byte(`{"path":"s/x.gp3","format":"gp5","artist":"Soilbed Quartet","title":"Brass Kettle","tracks":[{"name":"G","pitches":[36,43,48,53,57,62],"tuning":"Drop C (C G C F A D)"}],"tempos":[{"bar":1,"bpm":190},{"bar":9,"bpm":145}]}
+	os.WriteFile(index, []byte(finder.IndexHeader+"\n"+`{"path":"s/x.gp3","format":"gp5","artist":"Soilbed Quartet","title":"Brass Kettle","tracks":[{"name":"G","pitches":[36,43,48,53,57,62],"tuning":"Drop C (C G C F A D)"}],"tempos":[{"bar":1,"bpm":190},{"bar":9,"bpm":145}]}
 {"path":"a/y.gp5","format":"gp5","artist":"Amber Marsh","title":"First Frost","tracks":[{"name":"G","pitches":[35,40,45,50,55,59],"tuning":"Custom (B E A D G B)"}]}
 `), 0o644)
 	req := `{"op":"load","index":"` + index + `"}
