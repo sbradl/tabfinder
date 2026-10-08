@@ -62,6 +62,11 @@ func TestScoreFrettingHand(t *testing.T) {
 		return scoreOf(t, track(16, bar).Bars, 140, rhythmGuitar, difficulty.Rhythm)
 	}
 	harder(t, "an open string, a pedal tone riff, all notes fretted", scoreBar(chug), scoreBar(pedal), scoreBar(moving))
+
+	// Fingers stay down on notes played a moment ago.
+	alternating := line(0, [2]int{0, 7}, [2]int{1, 9}) // no stretch in either
+	run := line(0, [2]int{0, 7}, [2]int{0, 9}, [2]int{1, 7}, [2]int{1, 9}, [2]int{2, 6}, [2]int{2, 7}, [2]int{2, 9}, [2]int{1, 8})
+	harder(t, "two notes in turn, a run of eight", scoreBar(alternating), scoreBar(run))
 }
 
 func TestScorePickingHand(t *testing.T) {

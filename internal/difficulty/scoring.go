@@ -70,32 +70,30 @@ func unpicked(beat score.Beat) bool {
 	return true
 }
 
-// changesPerSecond is how often the fretting hand changes what it holds in a bar: a beat
-// with fretted notes other than the beat before. Open strings and repeated notes are free.
+// changesPerSecond is how often the fretting hand puts a finger down in a bar: beats with a
+// fretted note not played within the quarter note before, where a finger may still be.
+// Open strings and repeated notes are free.
 func changesPerSecond(b bar) float64 {
+	type finger struct{ string, fret int }
+	lastPlayed := map[finger]int{} // when
 	changes := 0
-	var held []score.Note
 	for _, beat := range b.beats {
-		frets := frettedNotes(beat)
-		if len(frets) > 0 && !slices.Equal(frets, held) {
-			changes++
+		changed := false
+		for _, n := range beat.Notes {
+			if !fretted(n) {
+				continue
+			}
+			f := finger{n.String, n.Fret}
+			if t, ok := lastPlayed[f]; !ok || beat.Start-t > score.Quarter {
+				changed = true
+			}
+			lastPlayed[f] = beat.Start
 		}
-		if beat.Struck() {
-			held = frets
+		if changed {
+			changes++
 		}
 	}
 	return float64(changes) / b.seconds()
-}
-
-// frettedNotes is the string and fret of the notes of a beat that need a finger.
-func frettedNotes(beat score.Beat) []score.Note {
-	var out []score.Note
-	for _, n := range beat.Notes {
-		if fretted(n) {
-			out = append(out, score.Note{String: n.String, Fret: n.Fret})
-		}
-	}
-	return out
 }
 
 // either combines two measures of 0 to 1 so that each alone can reach 1.
