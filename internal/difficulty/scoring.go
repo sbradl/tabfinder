@@ -17,16 +17,25 @@ func rating(r Role, bars []bar, plays []int) float64 {
 }
 
 // pickingHand is how hard a part is for the picking hand, from 0 to 1: half how fast it
-// picks through the faster quarter of its bars (13 strikes a second for 1), half how long
-// it picks fast all in all (five minutes for 1).
+// picks through the faster quarter of its bars, half how long it picks fast all in all
+// (five minutes for 1).
+//
+// Speed is judged against a limit: picking gets hard all at once around it, from
+// comfortable to undoable, and past it more speed adds little. Fitted to a band's own
+// ranking of songs, the limit is 6 strikes a second.
 func pickingHand(bars []bar, plays []int) float64 {
-	pace := scale(percentile(bars, 0.75, picksPerSecond), 2, 13)
+	pace := 1 / (1 + math.Exp(-pickSteepness*(percentile(bars, 0.75, picksPerSecond)-fastPickRate)))
 	stamina := scale(fastPicking(bars, plays), 0, 300)
 	return 0.5*pace + 0.5*stamina
 }
 
-// fastPickRate is the strikes per second from which picking is fast: eighths at 180 BPM.
+// fastPickRate is the strikes per second from which picking is fast: eighths at 180 BPM,
+// sixteenths at 90.
 const fastPickRate = 6
+
+// pickSteepness is how sharply picking gets hard around fastPickRate: from a tenth of the
+// way at 0.7 strikes a second below it to nine tenths at 0.7 above.
+const pickSteepness = 3
 
 // fastPicking is how long a part picks fast, in seconds, repeats included.
 func fastPicking(bars []bar, plays []int) float64 {
