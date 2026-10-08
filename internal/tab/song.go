@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"tabfinder/internal/difficulty"
 	"tabfinder/internal/score"
 )
 
@@ -74,6 +75,9 @@ type Song struct {
 	Tracks       []Track `json:"tracks,omitempty"`
 	Tempos       []Tempo `json:"tempos,omitempty"` // initial tempo first, then changes
 	Error        string  `json:"error,omitempty"`  // why the file couldn't be read, or only partly
+	// Parts is what drums, bass, rhythm and lead guitar play and how hard it is; none if
+	// the format has no notes (TuxGuitar, Power Tab).
+	Parts []difficulty.Part `json:"parts,omitempty"`
 
 	notes *score.Score // while scanning: the notes read, if the format has them
 }
@@ -150,12 +154,23 @@ func ReadNotes(path, root string) (*Song, *score.Score) {
 	s := scan(path, root)
 	notes := s.notes
 	s.notes = nil
-	if notes != nil {
-		for i := range notes.Bars {
-			notes.Bars[i].BPM = s.tempoAt(i + 1)
-		}
-	}
 	return s, notes
+}
+
+// rate fills in the tempo of each bar of the notes and the song's parts.
+func (s *Song) rate() {
+	n := s.notes
+	if n == nil {
+		return
+	}
+	for i := range n.Bars {
+		n.Bars[i].BPM = s.tempoAt(i + 1)
+	}
+	infos := make([]difficulty.TrackInfo, len(s.Tracks))
+	for i, t := range s.Tracks {
+		infos[i] = difficulty.TrackInfo{Name: t.Name, Instrument: t.Instrument, Drums: t.Drums, Pitches: t.Pitches}
+	}
+	s.Parts = difficulty.Analyze(n, infos)
 }
 
 // tempoAt is the tempo at the start of a 1-based bar, 0 if unknown.
@@ -188,6 +203,7 @@ func scan(path, root string) *Song {
 			n.Tracks[i].Bars = n.Tracks[i].Bars[:whole]
 		}
 	}
+	s.rate()
 	rel, relErr := filepath.Rel(root, path)
 	if relErr != nil || strings.HasPrefix(rel, "..") {
 		rel = path
