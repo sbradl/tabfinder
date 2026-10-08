@@ -3,7 +3,6 @@ package difficulty
 import (
 	"math/bits"
 	"slices"
-	"strconv"
 
 	"tabfinder/internal/score"
 )
@@ -46,7 +45,7 @@ func material(bars []bar, plays []int) (distinct, played int) {
 // groove for the first half of the bar.
 func differentBars(bars []bar) int {
 	var kinds [][]onset
-	seen := map[string]bool{} // bars exactly like one before: no need to compare them
+	seen := map[uint64]bool{} // bars exactly like one before: no need to compare them
 	for _, b := range bars {
 		o := b.onsets
 		key := onsetsKey(o)
@@ -66,64 +65,68 @@ func differentBars(bars []bar) int {
 	return len(kinds)
 }
 
-// onsetsKey is the onsets of a bar as text, the same for the same onsets.
-func onsetsKey(os []onset) string {
-	var b []byte
+// onsetsKey is a hash of the onsets of a bar, the same for the same onsets.
+func onsetsKey(os []onset) uint64 {
+	var h uint64
 	for _, o := range os {
-		b = strconv.AppendInt(b, int64(o.start), 10)
-		b = append(b, ':')
-		b = append(b, o.notes...)
-		b = append(b, '|')
+		h = (h^mix(uint64(o.start)))*0x100000001b3 ^ o.notes
 	}
-	return string(b)
+	return h
 }
 
-// onset is notes struck together: when, and what relative to the bar's first note
-// (for drums: which drums).
+// onset is notes struck together: when, and what relative to the bar's first note (for
+// drums: which drums), as a hash of the set of them.
 type onset struct {
 	start int
-	notes string
+	notes uint64
 }
 
 func onsets(b bar) []onset {
 	var out []onset
-	ref := -1
-	for _, beat := range b.beats {
+	ref := 0
+	for i, beat := range b.beats {
 		if !beat.Struck() {
 			continue
 		}
-		ps := beatPitches(b.info, beat)
-		if ref < 0 && !b.info.Drums {
-			ref = ps[0]
+		if len(out) == 0 && !b.info.Drums {
+			ref = lowestPitch(b.info, b.beats[i])
 		}
-		var notes []byte
-		for _, p := range ps {
-			notes = strconv.AppendInt(notes, int64(p-max(ref, 0)), 10)
-			notes = append(notes, ' ')
+		var notes uint64
+		for _, n := range beat.Notes {
+			switch {
+			case n.Tie:
+			case b.info.Drums:
+				notes += mix(uint64(n.Fret))
+			default:
+				notes += mix(uint64(pitch(b.info, n) - ref + 128))
+			}
 		}
 		if len(out) > 0 && out[len(out)-1].start == beat.Start { // another voice
-			out[len(out)-1].notes += string(notes)
+			out[len(out)-1].notes += notes
 			continue
 		}
-		out = append(out, onset{beat.Start, string(notes)})
+		out = append(out, onset{beat.Start, notes})
 	}
 	return out
 }
 
-// beatPitches is the pitches struck in a beat, lowest first; for drums the drums.
-func beatPitches(info TrackInfo, beat score.Beat) []int {
-	var ps []int
+// lowestPitch is the lowest pitch struck in a beat.
+func lowestPitch(info TrackInfo, beat score.Beat) int {
+	low := 1 << 30
 	for _, n := range beat.Notes {
-		switch {
-		case n.Tie:
-		case info.Drums:
-			ps = append(ps, n.Fret)
-		default:
-			ps = append(ps, pitch(info, n))
+		if !n.Tie {
+			low = min(low, pitch(info, n))
 		}
 	}
-	slices.Sort(ps)
-	return ps
+	return low
+}
+
+// mix scrambles a number, so that sums of them tell sets of numbers apart.
+func mix(x uint64) uint64 {
+	x += 0x9e3779b97f4a7c15
+	x = (x ^ x>>30) * 0xbf58476d1ce4e5b9
+	x = (x ^ x>>27) * 0x94d049bb133111eb
+	return x ^ x>>31
 }
 
 // before is the onsets before a time.
