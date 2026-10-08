@@ -13,6 +13,10 @@ to the folder layout and the file name.
 |---|---|
 | <img src="docs/screenshots/desktop-tuning.png" alt="The tuning menu, grouped by string count"> | <img src="docs/screenshots/desktop-light.png" alt="Songs by one artist between 100 and 150 BPM, in the light theme"> |
 
+| A range of difficulty per part | Rhythm guitar 5–7, easiest first |
+|---|---|
+| <img src="docs/screenshots/desktop-difficulty.png" alt="The difficulty popup with a range slider for drums, bass, rhythm and lead guitar"> | <img src="docs/screenshots/desktop-easiest.png" alt="Songs whose rhythm guitar part is level 5 to 7, easiest first"> |
+
 | Android | Android, filtered to Drop D |
 |---|---|
 | <img src="docs/screenshots/android-list.png" width="360" alt="The Android app's song list on a tablet"> | <img src="docs/screenshots/android-tuning.png" width="360" alt="The Android app filtered to Drop D"> |
@@ -70,7 +74,10 @@ mise run desktop-install  # build into ~/.local/bin/tabfinder and add a menu ent
 
 On first start, choose your tab folder. The folder dialog needs `kdialog` or `zenity`.
 Type into the artist, song, tuning and BPM fields to filter the list; the artist and
-tuning fields suggest values from your library. Click a song to open it in `tuxguitar`,
+tuning fields suggest values from your library. Each song shows how hard its parts are
+(drums, bass, rhythm and lead guitar, level 1 to 10, see [Difficulty](#difficulty)).
+"Difficulty…" sets a range of levels per part, and the sort button in the top bar
+orders the list A–Z, easiest first or hardest first. Click a song to open it in `tuxguitar`,
 which must be on your `PATH`. Songs whose file name TuxGuitar can't open are copied into
 the cache under a name it can open.
 

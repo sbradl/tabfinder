@@ -13,6 +13,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `tabscan`: `-drums`, `-bass`, `-rhythm` and `-lead` filter by a range of levels, `-tag`
   by tags, `-sort easiest|hardest` orders by difficulty. TSV has two more columns,
   `difficulty` and `tags`; JSON has the parts.
+- Desktop app: each song shows its parts with a meter and the level; "Difficulty…" sets
+  a range of levels per part, shown as chips under the fields; a sort menu orders the
+  list A–Z, easiest first or hardest first.
 
 ### Changed
 
