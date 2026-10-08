@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"image/color"
 	"log"
+	"math"
 
 	"gioui.org/font"
 	"gioui.org/font/gofont"
@@ -64,6 +65,22 @@ func (p palette) badge(strings int) badgeColors {
 	default:
 		return p.extended
 	}
+}
+
+// contrast is WCAG's contrast ratio of two colors, 1 to 21.
+func contrast(a, b color.NRGBA) float64 {
+	lum := func(c color.NRGBA) float64 {
+		ch := func(v uint8) float64 {
+			f := float64(v) / 255
+			if f <= 0.03928 {
+				return f / 12.92
+			}
+			return math.Pow((f+0.055)/1.055, 2.4)
+		}
+		return 0.2126*ch(c.R) + 0.7152*ch(c.G) + 0.0722*ch(c.B)
+	}
+	la, lb := lum(a), lum(b)
+	return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
 }
 
 //go:embed fonts/barlow_condensed_medium.ttf

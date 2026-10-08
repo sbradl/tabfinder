@@ -39,16 +39,26 @@ func (h *harness) renderWidget(size int, w layout.Widget) *image.RGBA {
 }
 
 func TestLevelColor(t *testing.T) {
-	if c := levelColor(1); c.G <= c.R {
-		t.Errorf("level 1 is %s, want green", hex(c))
-	}
-	if c := levelColor(10); c.R <= c.G {
-		t.Errorf("level 10 is %s, want red", hex(c))
-	}
-	for l := 2; l <= 10; l++ {
-		a, b := levelColor(l-1), levelColor(l)
-		if a == b || int(b.G)-int(b.R) > int(a.G)-int(a.R) {
-			t.Errorf("level %d (%s) isn't redder than %d (%s)", l, hex(b), l-1, hex(a))
+	for name, p := range map[string]palette{"dark": dark, "light": light} {
+		if c := p.level(1); c.G <= c.R {
+			t.Errorf("%s: level 1 is %s, want green", name, hex(c))
+		}
+		if c := p.level(10); c.R <= c.G {
+			t.Errorf("%s: level 10 is %s, want red", name, hex(c))
+		}
+		for l := 1; l <= 10; l++ {
+			c := p.level(l)
+			// WCAG's contrast for graphics.
+			if r := contrast(c, p.bg); r < 3 {
+				t.Errorf("%s: level %d (%s) has a contrast of %.1f to the background, want 3 or more", name, l, hex(c), r)
+			}
+			if l == 1 {
+				continue
+			}
+			a := p.level(l - 1)
+			if a == c || int(c.G)-int(c.R) > int(a.G)-int(a.R) {
+				t.Errorf("%s: level %d (%s) isn't redder than %d (%s)", name, l, hex(c), l-1, hex(a))
+			}
 		}
 	}
 }
@@ -63,7 +73,7 @@ func TestMeter(t *testing.T) {
 		{1, "h...."}, {2, "f...."}, {5, "ffh.."}, {8, "ffff."}, {9, "ffffh"}, {10, "fffff"},
 	} {
 		img := h.renderWidget(40, func(gtx C) D { return h.u.meter(gtx, tt.level) })
-		lit, dim := levelColor(tt.level), h.u.pal.outline
+		lit, dim := h.u.pal.level(tt.level), h.u.pal.outline
 		for i, want := range tt.bars {
 			b := meterBar(i)
 			x := (b.Min.X + b.Max.X) / 2
@@ -112,7 +122,7 @@ func TestRowParts(t *testing.T) {
 		row := h.rowRect(0)
 		img := h.render()
 		for _, l := range []int{5, 7, 8, 9} {
-			if !hasColor(img, row, levelColor(l)) {
+			if !hasColor(img, row, h.u.pal.level(l)) {
 				t.Errorf("%d dp: no meter of level %d in the row", w, l)
 			}
 		}
@@ -121,7 +131,7 @@ func TestRowParts(t *testing.T) {
 		row = h.rowRect(0)
 		img = h.render()
 		for l := 1; l <= 10; l++ {
-			if hasColor(img, row, levelColor(l)) {
+			if hasColor(img, row, h.u.pal.level(l)) {
 				t.Errorf("%d dp: a song without parts has a meter of level %d", w, l)
 			}
 		}

@@ -576,10 +576,20 @@ func (u *ui) roleIcon(gtx C, r difficulty.Role, size unit.Dp, c color.NRGBA) D {
 
 // --- parts on the rows ---
 
-// levelColor is a level's color, green for 1 to red for 10.
-func levelColor(level int) color.NRGBA {
+// level is a level's color, green for 1 to red for 10, dark enough to stand out against
+// the background (WCAG's 3:1 for graphics).
+func (p palette) level(level int) color.NRGBA {
 	hue := 120 * float64(10-min(max(level, 1), 10)) / 9 // degrees
-	const s, v = 0.75, 0.85
+	c := greenToRed(hue, 0.85)
+	for v := 0.85; contrast(c, p.bg) < 3 && v > 0; v -= 0.01 {
+		c = greenToRed(hue, v)
+	}
+	return c
+}
+
+// greenToRed is the color of a hue between red (0°) and green (120°), at value v.
+func greenToRed(hue, v float64) color.NRGBA {
+	const s = 0.75
 	c := v * s
 	x := c * (1 - math.Abs(math.Mod(hue/60, 2)-1))
 	var r, g float64
@@ -605,7 +615,7 @@ func (u *ui) meter(gtx C, level int) D {
 	dp := func(r image.Rectangle) image.Rectangle {
 		return image.Rect(gtx.Dp(unit.Dp(r.Min.X)), gtx.Dp(unit.Dp(r.Min.Y)), gtx.Dp(unit.Dp(r.Max.X)), gtx.Dp(unit.Dp(r.Max.Y)))
 	}
-	lit := levelColor(level)
+	lit := u.pal.level(level)
 	for i := range 5 {
 		b := meterBar(i)
 		paint.FillShape(gtx.Ops, u.pal.outline, clip.Rect(dp(b)).Op())
