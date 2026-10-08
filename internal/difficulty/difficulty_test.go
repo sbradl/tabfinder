@@ -643,9 +643,9 @@ func TestTagPolyrhythm(t *testing.T) {
 		info          []difficulty.TrackInfo
 		drums, rhythm bool // a polyrhythm tag on that part
 	}{
-		// The drummer just keeps the beat; the guitarist plays against it.
-		{"triplets over straight sixteenths", []score.Track{drumsTrack, track(8, tuplets(3, e, powerChord...))}, both, false, true},
-		{"straight sixteenths over triplets", []score.Track{{Drums: true, Bars: track(8, tuplets(3, e, snare)).Bars}, track(8, every(s, powerChord...))}, both, true, false},
+		// Triplets against a straight beat are just triplets.
+		{"triplets over straight sixteenths", []score.Track{drumsTrack, track(8, tuplets(3, e, powerChord...))}, both, false, false},
+		{"straight sixteenths over triplets", []score.Track{{Drums: true, Bars: track(8, tuplets(3, e, snare)).Bars}, track(8, every(s, powerChord...))}, both, false, false},
 		{"triplets alone", []score.Track{track(8, tuplets(3, e, powerChord...))}, rhythmGuitar, false, false},
 		{"groups of three sixteenths", []score.Track{{Bars: grouped(8, 3)}}, rhythmGuitar, false, true},
 		{"groups of five sixteenths over a rock beat", []score.Track{drumsTrack, {Bars: grouped(8, 5)}}, both, false, true},
