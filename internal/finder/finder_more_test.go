@@ -174,7 +174,7 @@ func TestArtistsOf(t *testing.T) {
 func TestQueryFilter(t *testing.T) {
 	t.Run("trimmed and passed through", func(t *testing.T) {
 		f, invalid := Query{Name: "  a b ", Artist: " c ", Tuning: " d e ", BPM: " 100 - 140 ", Strings: 7}.Filter()
-		if invalid || f.Name != "a b" || f.Artist != "c" || f.Tuning != "d e" || f.Strings != 7 || f.BPM == nil || *f.BPM != (BPMRange{Min: 100, Max: 140}) {
+		if invalid || f.Name != "a b" || f.Artist != "c" || f.Tuning != "d e" || f.Strings != 7 || f.BPM == nil || *f.BPM != (Range{Min: 100, Max: 140}) {
 			t.Errorf("filter = %+v, invalid %v", f, invalid)
 		}
 	})

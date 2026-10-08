@@ -55,14 +55,14 @@ func TestFilterMore(t *testing.T) {
 		{"strings and tuning on different tracks", Filter{Tuning: "drop d", Strings: 4}, false},
 		{"b standard is the 7 string", Filter{Tuning: "b standard", Strings: 7}, true},
 		{"b standard is not the 6 string", Filter{Tuning: "b standard", Strings: 6}, false},
-		{"bpm: in range", Filter{BPM: &BPMRange{90, 110}}, true},
-		{"bpm: lower bound inclusive", Filter{BPM: &BPMRange{100, 100}}, true},
-		{"bpm: upper bound inclusive", Filter{BPM: &BPMRange{0, 100.5}}, true},
-		{"bpm: just above", Filter{BPM: &BPMRange{100.6, 200}}, false},
-		{"bpm: open ended", Filter{BPM: &BPMRange{100.5, math.Inf(1)}}, true},
+		{"bpm: in range", Filter{BPM: &Range{90, 110}}, true},
+		{"bpm: lower bound inclusive", Filter{BPM: &Range{100, 100}}, true},
+		{"bpm: upper bound inclusive", Filter{BPM: &Range{0, 100.5}}, true},
+		{"bpm: just above", Filter{BPM: &Range{100.6, 200}}, false},
+		{"bpm: open ended", Filter{BPM: &Range{100.5, math.Inf(1)}}, true},
 		{"bpm: not set", Filter{}, true},
-		{"everything", Filter{Name: "nectar", Artist: "argyle", Tuning: "drop d", Strings: 6, BPM: &BPMRange{100, 101}}, true},
-		{"everything but one", Filter{Name: "nectar", Artist: "argyle", Tuning: "drop d", Strings: 6, BPM: &BPMRange{200, 300}}, false},
+		{"everything", Filter{Name: "nectar", Artist: "argyle", Tuning: "drop d", Strings: 6, BPM: &Range{100, 101}}, true},
+		{"everything but one", Filter{Name: "nectar", Artist: "argyle", Tuning: "drop d", Strings: 6, BPM: &Range{200, 300}}, false},
 	}
 	for _, tt := range tests {
 		if got := tt.f.Matches(song); got != tt.want {
@@ -92,7 +92,7 @@ func TestFilterEmptySongs(t *testing.T) {
 		{"no tracks, name", Filter{Name: "x"}, bare, true},
 		{"no tracks, tuning", Filter{Tuning: "drop d"}, bare, false},
 		{"no tracks, strings", Filter{Strings: 6}, bare, false},
-		{"no tempos, bpm", Filter{BPM: &BPMRange{0, math.Inf(1)}}, bare, false},
+		{"no tempos, bpm", Filter{BPM: &Range{0, math.Inf(1)}}, bare, false},
 		{"drums only, strings", Filter{Strings: 6}, drumsOnly, false},
 		{"drums only, tuning", Filter{Tuning: "standard"}, drumsOnly, false},
 		{"empty filter, empty song", Filter{}, &tab.Song{}, true},
@@ -108,7 +108,7 @@ func TestFilterActive(t *testing.T) {
 	if (Filter{}).Active() {
 		t.Error("zero filter is active")
 	}
-	for _, f := range []Filter{{Name: "a"}, {Artist: "a"}, {Tuning: "a"}, {Strings: 6}, {BPM: &BPMRange{}}} {
+	for _, f := range []Filter{{Name: "a"}, {Artist: "a"}, {Tuning: "a"}, {Strings: 6}, {BPM: &Range{}}} {
 		if !f.Active() {
 			t.Errorf("%+v is not active", f)
 		}

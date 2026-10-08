@@ -3,7 +3,11 @@
 // part with what makes it hard, such as fast playing, odd meters or tapping.
 package difficulty
 
-import "tabfinder/internal/score"
+import (
+	"math"
+
+	"tabfinder/internal/score"
+)
 
 // Role is what a band member plays.
 type Role string
@@ -31,6 +35,9 @@ type Part struct {
 	Score  float64  `json:"score"`  // how hard it is to play, 1 to 10
 	Tags   []string `json:"tags,omitempty"`
 }
+
+// Level is the score as a whole number, 1 to 10: what's searched for and shown.
+func (p Part) Level() int { return int(math.Round(p.Score)) }
 
 // Analyze splits a song into parts, in the order drums, bass, rhythm, lead, leaving out
 // those nobody plays. tracks are the score's tracks, in the same order.

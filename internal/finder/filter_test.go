@@ -54,9 +54,9 @@ func TestFilter(t *testing.T) {
 		{Filter{Tuning: "Drop Db"}, true},
 		{Filter{Tuning: "C# Ab C# F# Bb Eb"}, true},
 		{Filter{Tuning: "drop c"}, false},
-		{Filter{BPM: &BPMRange{130, 150}}, true},
-		{Filter{BPM: &BPMRange{150, 200}}, false},
-		{Filter{Artist: "metro kettle", Tuning: "drop c#", BPM: &BPMRange{200, 250}}, true},
+		{Filter{BPM: &Range{130, 150}}, true},
+		{Filter{BPM: &Range{150, 200}}, false},
+		{Filter{Artist: "metro kettle", Tuning: "drop c#", BPM: &Range{200, 250}}, true},
 		// String count, matched on the same track as the tuning.
 		{Filter{Strings: 6}, true},
 		{Filter{Strings: 7}, false},

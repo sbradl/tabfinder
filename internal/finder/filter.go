@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
+	"tabfinder/internal/difficulty"
 	"tabfinder/internal/tab"
 )
 
@@ -15,16 +17,24 @@ type Filter struct {
 	Name, Artist, Tuning string
 	// Strings, if not 0, requires the string count on the same track as Tuning.
 	Strings int
-	BPM     *BPMRange // nil: any tempo
+	BPM     *Range // nil: any tempo
+	// Parts is what a song's parts must be like, by role: none for any.
+	Parts map[difficulty.Role]PartFilter
 }
 
-// BPMRange is a range of tempos, both ends included; Max may be +Inf.
-type BPMRange struct{ Min, Max float64 }
+// PartFilter is what a part of a song must be like.
+type PartFilter struct {
+	Level *Range   // nil: any level
+	Tags  []string // all of them
+}
 
-func (r BPMRange) Contains(bpm float64) bool { return bpm >= r.Min && bpm <= r.Max }
+// Range is a range of numbers, tempos or levels, both ends included; Max may be +Inf.
+type Range struct{ Min, Max float64 }
+
+func (r Range) Contains(v float64) bool { return v >= r.Min && v <= r.Max }
 
 func (f Filter) Active() bool {
-	return f.Name != "" || f.Artist != "" || f.Tuning != "" || f.Strings != 0 || f.BPM != nil
+	return f.Name != "" || f.Artist != "" || f.Tuning != "" || f.Strings != 0 || f.BPM != nil || len(f.Parts) > 0
 }
 
 func (f Filter) Matches(s *tab.Song) bool {
@@ -45,7 +55,44 @@ func (f Filter) Matches(s *tab.Song) bool {
 	if f.BPM != nil && !hasTempo(s, *f.BPM) {
 		return false
 	}
+	for r, pf := range f.Parts {
+		if !pf.matches(s, r) {
+			return false
+		}
+	}
 	return true
+}
+
+// matches reports whether a song's part of a role is like this. A song without the part
+// matches a level range from 1 on, with no tags: nobody has to play anything. A song not
+// rated (no notes in the file) matches no part filter.
+func (pf PartFilter) matches(s *tab.Song, r difficulty.Role) bool {
+	if s.Parts == nil {
+		return false
+	}
+	p, ok := partOf(s, r)
+	if !ok {
+		return len(pf.Tags) == 0 && (pf.Level == nil || pf.Level.Min <= 1)
+	}
+	if pf.Level != nil && !pf.Level.Contains(float64(p.Level())) {
+		return false
+	}
+	for _, tag := range pf.Tags {
+		if !slices.Contains(p.Tags, tag) {
+			return false
+		}
+	}
+	return true
+}
+
+// partOf is a song's part of a role.
+func partOf(s *tab.Song, r difficulty.Role) (difficulty.Part, bool) {
+	for _, p := range s.Parts {
+		if p.Role == r {
+			return p, true
+		}
+	}
+	return difficulty.Part{}, false
 }
 
 // hasTrack reports whether a track has the wanted tuning and string count.
@@ -62,7 +109,7 @@ func (f Filter) hasTrack(s *tab.Song) bool {
 }
 
 // hasTempo reports whether any tempo the song uses lies in r.
-func hasTempo(s *tab.Song, r BPMRange) bool {
+func hasTempo(s *tab.Song, r Range) bool {
 	for _, t := range s.Tempos {
 		if r.Contains(t.BPM) {
 			return true
@@ -72,26 +119,33 @@ func hasTempo(s *tab.Song, r BPMRange) bool {
 }
 
 // ParseBPMRange parses "120", "100-140", "180-" (at least) or "-90" (at most).
-func ParseBPMRange(v string) (BPMRange, error) {
+func ParseBPMRange(v string) (Range, error) { return parseRange(v, "bpm") }
+
+// ParseLevelRange parses a range of difficulty levels (1 to 10) like a BPM range: "3",
+// "2-4", "7-" (at least) or "-3" (at most).
+func ParseLevelRange(v string) (Range, error) { return parseRange(v, "level") }
+
+// parseRange parses a range of what: "120", "100-140", "180-" or "-90".
+func parseRange(v, what string) (Range, error) {
 	v = strings.TrimSpace(v)
 	lo, hi, isRange := strings.Cut(v, "-")
 	if !isRange {
 		lo, hi = v, v
 	}
-	r := BPMRange{0, math.Inf(1)}
+	r := Range{0, math.Inf(1)}
 	var err error
 	if lo = strings.TrimSpace(lo); lo != "" {
 		if r.Min, err = strconv.ParseFloat(lo, 64); err != nil {
-			return BPMRange{}, fmt.Errorf("invalid bpm %q", v)
+			return Range{}, fmt.Errorf("invalid %s %q", what, v)
 		}
 	}
 	if hi = strings.TrimSpace(hi); hi != "" {
 		if r.Max, err = strconv.ParseFloat(hi, 64); err != nil {
-			return BPMRange{}, fmt.Errorf("invalid bpm %q", v)
+			return Range{}, fmt.Errorf("invalid %s %q", what, v)
 		}
 	}
 	if math.IsNaN(r.Min) || math.IsNaN(r.Max) || r.Min > r.Max || (lo == "" && hi == "") {
-		return BPMRange{}, fmt.Errorf("invalid bpm range %q", v)
+		return Range{}, fmt.Errorf("invalid %s range %q", what, v)
 	}
 	return r, nil
 }

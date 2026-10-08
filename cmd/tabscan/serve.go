@@ -60,7 +60,7 @@ func serve(in io.Reader, out io.Writer) error {
 				}
 				resp = r
 			case "search":
-				q := finder.Query(req.Query)
+				q := finder.Query{Name: req.Query.Name, Artist: req.Query.Artist, Tuning: req.Query.Tuning, BPM: req.Query.BPM, Strings: req.Query.Strings}
 				res := lib.Search(q)
 				resp = searchResponse{
 					Matches:    matchedPaths(lib, res.Matches),
