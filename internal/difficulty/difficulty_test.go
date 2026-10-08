@@ -63,6 +63,8 @@ func TestRoles(t *testing.T) {
 			track(4, every(e, powerChord...)),
 			track(4, every(q, score.Note{String: 3, Fret: 5})),
 			track(4, nil), // a guitar that doesn't play
+			track(4, every(q, score.Note{Fret: 0})),
+			track(4, every(q, score.Note{Fret: 0})),
 		},
 	}
 	tracks := []difficulty.TrackInfo{
@@ -71,6 +73,8 @@ func TestRoles(t *testing.T) {
 		{Name: "Guitar", Instrument: "Distortion Guitar", Pitches: stdGuitar},
 		{Name: "Woodwind", Instrument: "Oboe", Pitches: stdGuitar},
 		{Name: "Guitar 2", Instrument: "Distortion Guitar", Pitches: stdGuitar},
+		{Name: "Lead Vocals", Instrument: "FX 3 (crystal)"},                         // no strings: sung
+		{Name: "Solo Violin", Instrument: "Violin", Pitches: []int{55, 62, 69, 76}}, // not a guitar's strings
 	}
 	got := difficulty.Analyze(sc, tracks)
 	want := []difficulty.Part{
