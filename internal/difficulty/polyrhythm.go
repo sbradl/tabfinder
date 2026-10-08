@@ -32,9 +32,20 @@ func polyrhythms(sc *score.Score, tracks []TrackInfo) []map[int]bool {
 }
 
 // displaced reports whether a track's bars from b on, up to 64 sixteenths of them, repeat a
-// pattern of struck notes every p sixteenths, where p doesn't divide the first bar. Drums
-// count kick and snare only. A window with notes off the sixteenth grid isn't judged.
+// pattern of struck notes every p sixteenths, where p doesn't divide the first bar, and
+// nothing in step with the bar fits.
 func displaced(sc *score.Score, t, b int, drums bool) bool {
+	p, outOfStep, inStep, ok := groupingFit(sc, t, b, drums)
+	return ok && p != 0 && outOfStep <= 0.05 && inStep > 0.25
+}
+
+// groupingFit looks for patterns of struck notes in a track's bars from b on, up to 64
+// sixteenths of them: the period out of step with the first bar that fits best (0 for
+// none), repeating at least three times, and how badly it and the best period in step
+// fit: the share of notes that don't repeat. Drums count kick and snare only. ok is false
+// for a window not to judge: notes off the sixteenth grid, too few notes, the same note
+// all through.
+func groupingFit(sc *score.Score, t, b int, drums bool) (p int, outOfStep, inStep float64, ok bool) {
 	const s = score.Quarter / 4
 	var grid uint64
 	length := 0 // in sixteenths
@@ -52,16 +63,15 @@ func displaced(sc *score.Score, t, b int, drums bool) bool {
 				continue
 			}
 			if beat.Start%s != 0 {
-				return false
+				return 0, 0, 0, false
 			}
 			grid |= 1 << (length + beat.Start/s)
 		}
 		length += n
 	}
 	if length < 2*barLen || bits.OnesCount64(grid) < 4 {
-		return false
+		return 0, 0, 0, false
 	}
-	// How badly the pattern repeats after p sixteenths: the share of notes that don't.
 	misfit := func(p int) float64 {
 		mask := uint64(1)<<(length-p) - 1
 		notes := bits.OnesCount64(grid & mask)
@@ -71,21 +81,19 @@ func displaced(sc *score.Score, t, b int, drums bool) bool {
 		return float64(bits.OnesCount64((grid^grid>>p)&mask)) / float64(notes)
 	}
 	if misfit(1) <= 0.1 {
-		return false // the same all through
+		return 0, 0, 0, false // the same all through
 	}
-	// The best fitting period in step with the bar (a divisor or multiple of it), and the
-	// first one out of step that fits, repeated three times at least.
-	inStep, p := 1.0, 0
+	outOfStep, inStep = 1, 1
 	for q := 2; q <= length/2; q++ {
 		f := misfit(q)
 		switch {
 		case barLen%q == 0 || q%barLen == 0:
 			inStep = min(inStep, f)
-		case p == 0 && 3*q <= length && f <= 0.05:
-			p = q
+		case 3*q <= length && f < outOfStep:
+			p, outOfStep = q, f
 		}
 	}
-	return p != 0 && inStep > 0.25 // the bar doesn't fit it at all
+	return p, outOfStep, inStep, true
 }
 
 func kickOrSnare(b score.Beat) bool {

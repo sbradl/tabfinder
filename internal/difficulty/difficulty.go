@@ -181,7 +181,7 @@ func tags(r Role, bars []bar) []string {
 	if often(bars, func(b bar) bool { return hasTuplet(b.beats, isOddTuplet) }) {
 		out = append(out, "tuplets")
 	}
-	if often(bars, func(b bar) bool { return b.poly }) {
+	if count(bars, func(b bar) bool { return b.poly }) >= 4 { // one passage is enough
 		out = append(out, "polyrhythm")
 	}
 	return out
@@ -506,13 +506,19 @@ func hasGhost(b bar) bool {
 // often reports whether bars with something come up in a part more than once or twice:
 // in at least two bars and every eighth.
 func often(bars []bar, has func(bar) bool) bool {
+	n := count(bars, has)
+	return n >= 2 && 8*n >= len(bars)
+}
+
+// count is the number of bars with something.
+func count(bars []bar, has func(bar) bool) int {
 	n := 0
 	for _, b := range bars {
 		if has(b) {
 			n++
 		}
 	}
-	return n >= 2 && 8*n >= len(bars)
+	return n
 }
 
 // hasTuplet reports whether a beat struck is an n:m tuplet of a kind.
