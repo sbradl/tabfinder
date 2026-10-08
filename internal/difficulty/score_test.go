@@ -1,6 +1,7 @@
 package difficulty_test
 
 import (
+	"slices"
 	"testing"
 
 	"tabfinder/internal/difficulty"
@@ -37,9 +38,9 @@ func TestScoreRange(t *testing.T) {
 	if easy < 1 || easy > 2 {
 		t.Errorf("a power chord per bar at 80: score %v, want 1 to 2", easy)
 	}
-	frantic := scoreOf(t, track(16, every(s, powerChord...)).Bars, 320, rhythmGuitar, difficulty.Rhythm)
+	frantic := scoreOf(t, track(320, every(s, powerChord...)).Bars, 320, rhythmGuitar, difficulty.Rhythm)
 	if frantic < 9 || frantic > 10 {
-		t.Errorf("sixteenth power chords at 320: score %v, want 9 to 10", frantic)
+		t.Errorf("four minutes of sixteenth power chords at 320: score %v, want 9 to 10", frantic)
 	}
 }
 
@@ -146,6 +147,23 @@ func TestScoreMaterial(t *testing.T) {
 	one := scoreOf(t, track(40, many[7]).Bars, 120, rhythmGuitar, difficulty.Rhythm)
 	different := scoreOf(t, many, 120, rhythmGuitar, difficulty.Rhythm)
 	harder(t, "one bar 40 times, 40 different bars", one, different)
+}
+
+func TestScorePickingStamina(t *testing.T) {
+	riff := every(e, powerChord...) // eighths at 200: 6.7 a second
+	short := scoreOf(t, track(30, riff).Bars, 200, rhythmGuitar, difficulty.Rhythm)
+	long := scoreOf(t, track(120, riff).Bars, 200, rhythmGuitar, difficulty.Rhythm)
+	harder(t, "a minute of fast picking, four minutes", short, long)
+
+	// Two fast bars in twenty: a burst, not what the song asks all through.
+	slow, fast := every(q, powerChord...), every(s, powerChord...)
+	burst := slices.Concat(track(18, slow).Bars, track(2, fast).Bars)
+	throughout := track(20, fast).Bars
+	harder(t, "fast in two of twenty bars, fast throughout",
+		scoreOf(t, burst, 160, rhythmGuitar, difficulty.Rhythm), scoreOf(t, throughout, 160, rhythmGuitar, difficulty.Rhythm))
+	if b := scoreOf(t, burst, 160, rhythmGuitar, difficulty.Rhythm); b > 5 {
+		t.Errorf("quarter notes with a fast fill at 160: score %v, want 5 at most", b)
+	}
 }
 
 func TestScoreRisesWithSpeed(t *testing.T) {

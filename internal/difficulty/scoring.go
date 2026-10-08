@@ -11,15 +11,40 @@ import (
 // asks of either hand, plus its rhythm and how much there is to learn. plays is how often
 // each bar of the song is played.
 func rating(r Role, bars []bar, plays []int) float64 {
-	hands := either(pickingHand(bars), frettingHand(bars))
+	hands := either(pickingHand(bars, plays), frettingHand(bars))
 	hard := hands + 0.15*rhythmic(r, bars) + 0.15*learning(bars, plays)
 	return math.Round((1+9*clamp(hard))*10) / 10
 }
 
-// pickingHand is how hard a part is for the picking hand, from 0 for a strike every few
-// seconds to 1 for 16 a second: what it keeps up for a while, the 90th percentile of its bars.
-func pickingHand(bars []bar) float64 {
-	return scale(percentile(bars, 0.9, picksPerSecond), 2, 16)
+// pickingHand is how hard a part is for the picking hand, from 0 to 1: half how fast it
+// picks through the faster quarter of its bars (13 strikes a second for 1), half how long
+// it picks fast all in all (five minutes for 1).
+func pickingHand(bars []bar, plays []int) float64 {
+	pace := scale(percentile(bars, 0.75, picksPerSecond), 2, 13)
+	stamina := scale(fastPicking(bars, plays), 0, 300)
+	return 0.5*pace + 0.5*stamina
+}
+
+// fastPickRate is the strikes per second from which picking is fast: eighths at 180 BPM.
+const fastPickRate = 6
+
+// fastPicking is how long a part picks fast, in seconds, repeats included.
+func fastPicking(bars []bar, plays []int) float64 {
+	total := 0.0
+	for _, b := range bars {
+		if picksPerSecond(b) >= fastPickRate {
+			total += b.seconds() * float64(timesOf(b, plays))
+		}
+	}
+	return total
+}
+
+// timesOf is how often a bar is played.
+func timesOf(b bar, plays []int) int {
+	if b.index < len(plays) {
+		return plays[b.index]
+	}
+	return 1
 }
 
 // frettingHand is how hard a part is for the fretting hand, from 0 to 1 for 10 grips a
