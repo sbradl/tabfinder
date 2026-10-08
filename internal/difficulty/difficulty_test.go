@@ -622,6 +622,50 @@ func TestTagStructureDrumFillsAreNoNewPart(t *testing.T) {
 	}
 }
 
+// grouped is n bars of 4/4 of power chords on every k-th sixteenth, counted on over the bar
+// lines: a grouping of k that the bars don't divide shifts against them.
+func grouped(n, k int) [][]score.Beat {
+	out := make([][]score.Beat, n)
+	for i := range n * 16 {
+		if i%k == 0 {
+			out[i/16] = append(out[i/16], score.Beat{Start: i % 16 * s, Dur: s, Notes: powerChord})
+		}
+	}
+	return out
+}
+
+func TestTagPolyrhythm(t *testing.T) {
+	drumsTrack := score.Track{Drums: true, Bars: track(8, rockBeat()).Bars}
+	both := append(slices.Clone(drumKit), rhythmGuitar...)
+	tests := []struct {
+		name          string
+		tracks        []score.Track
+		info          []difficulty.TrackInfo
+		drums, rhythm bool // a polyrhythm tag on that part
+	}{
+		// The drummer just keeps the beat; the guitarist plays against it.
+		{"triplets over straight sixteenths", []score.Track{drumsTrack, track(8, tuplets(3, e, powerChord...))}, both, false, true},
+		{"straight sixteenths over triplets", []score.Track{{Drums: true, Bars: track(8, tuplets(3, e, snare)).Bars}, track(8, every(s, powerChord...))}, both, true, false},
+		{"triplets alone", []score.Track{track(8, tuplets(3, e, powerChord...))}, rhythmGuitar, false, false},
+		{"groups of three sixteenths", []score.Track{{Bars: grouped(8, 3)}}, rhythmGuitar, false, true},
+		{"groups of five sixteenths over a rock beat", []score.Track{drumsTrack, {Bars: grouped(8, 5)}}, both, false, true},
+		{"groups of four", []score.Track{{Bars: grouped(8, 4)}}, rhythmGuitar, false, false},
+		{"3-3-2 in every bar", []score.Track{track(8, at(0, 3*e, 6*e))}, rhythmGuitar, false, false},
+		{"straight eighths with a rock beat", []score.Track{drumsTrack, track(8, every(e, powerChord...))}, both, false, false},
+	}
+	for _, tt := range tests {
+		sc := &score.Score{Bars: bars4(8, 120), Tracks: tt.tracks}
+		got := map[difficulty.Role]bool{}
+		for _, p := range difficulty.Analyze(sc, tt.info) {
+			got[p.Role] = slices.Contains(p.Tags, "polyrhythm")
+		}
+		if got[difficulty.Drums] != tt.drums || got[difficulty.Rhythm] != tt.rhythm {
+			t.Errorf("%s: polyrhythm on drums %v, rhythm %v; want %v, %v", tt.name,
+				got[difficulty.Drums], got[difficulty.Rhythm], tt.drums, tt.rhythm)
+		}
+	}
+}
+
 // melody is a bar of single sixteenth notes up and down the B and high E strings
 // around the 12th fret, with fx on every fourth note.
 func melody(fx score.Fx) []score.Beat {
