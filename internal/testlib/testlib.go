@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"tabfinder/internal/difficulty"
 	"tabfinder/internal/tab"
 )
 
@@ -47,7 +48,7 @@ func Songs() []*tab.Song {
 	unreadable := song("Broken/Broken Song.gp5", "", "Broken", "", "Broken Song", nil)
 	unreadable.Error = "unknown file format"
 	unreadable.ArtistSource, unreadable.AlbumSource, unreadable.TitleSource = "path", "path", "path"
-	return []*tab.Song{
+	songs := []*tab.Song{
 		song("Soilbed Quartet/Glass Orchard/Brass Kettle.gp5", "gp5", "Soilbed Quartet", "Glass Orchard", "Brass Kettle", []tab.Track{DropC6, DropC4, Drums}, 190, 145, 190),
 		song("Amber Marsh/Tide of Lanterns/Where Rivers Seem to Rest.gp5", "gp5", "Amber Marsh", "Tide of Lanterns", "Where Rivers Seem to Rest", []tab.Track{EStd6, Custom6}, 120.5),
 		song("Inkwell Flamingos/Hive/Embrace the Unseen.gp4", "gp4", "Inkwell Flamingos", "Hive", "Embrace the Unseen", []tab.Track{DropD6, Bass4}, 140),
@@ -60,7 +61,26 @@ func Songs() []*tab.Song {
 		song("Long/Long.gp5", "gp5", "Long Titles", "", LongTitle, []tab.Track{EStd6}, 100),
 		unreadable,
 	}
+	// Parts, with levels from 2 to 9 so a range of them picks some songs, and some songs
+	// with none: they were scanned before parts were rated, or nobody plays them.
+	songs[0].Parts = parts(drums(7.2, "double kick"), bass(5), rhythm(8.4, "fast", "chords"), lead(9.1, "bends", "sweeps"))
+	songs[1].Parts = parts(rhythm(4.8, "chords"), lead(5.5, "bends"))
+	songs[2].Parts = parts(bass(4.4), rhythm(6, "syncopated"))
+	songs[3].Parts = parts(rhythm(7, "odd meter"), lead(8, "tapping"))
+	songs[4].Parts = parts(rhythm(2.2, "repetitive"))
+	songs[5].Parts = parts(drums(2), bass(3), rhythm(3.6, "chords"))
+	return songs
 }
+
+func parts(ps ...difficulty.Part) []difficulty.Part { return ps }
+
+func part(r difficulty.Role) func(float64, ...string) difficulty.Part {
+	return func(score float64, tags ...string) difficulty.Part {
+		return difficulty.Part{Role: r, Tracks: []int{0}, Score: score, Tags: tags}
+	}
+}
+
+var drums, bass, rhythm, lead = part(difficulty.Drums), part(difficulty.Bass), part(difficulty.Rhythm), part(difficulty.Lead)
 
 // WriteIndex writes songs as an index file, the way tabscan -json (and finder.ScanIndex) does.
 func WriteIndex(t testing.TB, path string, songs []*tab.Song) {
