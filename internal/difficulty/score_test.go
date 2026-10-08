@@ -166,11 +166,34 @@ func TestScorePickingStamina(t *testing.T) {
 	}
 }
 
-func TestScoreRisesWithSpeed(t *testing.T) {
-	riff := track(16, every(s, powerChord...)).Bars
-	var scores []float64
-	for _, bpm := range []float64{60, 100, 140, 180} {
-		scores = append(scores, scoreOf(t, riff, bpm, rhythmGuitar, difficulty.Rhythm))
+func TestScorePickingLimit(t *testing.T) {
+	// Picking gets hard all at once near a limit: ten BPM more change little far below it and
+	// a lot around it. Each song is four minutes of sixteenths.
+	at := func(bpm int) float64 {
+		return scoreOf(t, track(bpm, every(s, powerChord...)).Bars, float64(bpm), rhythmGuitar, difficulty.Rhythm)
 	}
-	harder(t, "sixteenth power chords at 60, 100, 140, 180 BPM", scores...)
+	below, around := at(65)-at(55), at(95)-at(85)
+	if around < 3*below || around < 2 {
+		t.Errorf("ten BPM more: %.1f far below the limit (55 to 65), %.1f around it (85 to 95); want at least 2 and three times as much",
+			below, around)
+	}
+	// Past the limit, who can pick that fast can mostly pick faster too.
+	if above := at(180) - at(130); above >= 1 {
+		t.Errorf("fifty BPM more past the limit (130 to 180): %.1f, want less than 1", above)
+	}
+}
+
+func TestScoreRisesWithSpeed(t *testing.T) {
+	var scores []float64
+	for _, bpm := range []int{60, 100, 140, 180} { // four minutes each
+		scores = append(scores, scoreOf(t, track(bpm, every(s, powerChord...)).Bars, float64(bpm), rhythmGuitar, difficulty.Rhythm))
+	}
+	for i := 1; i < len(scores); i++ {
+		if scores[i] < scores[i-1] {
+			t.Errorf("sixteenth power chords at 60, 100, 140, 180 BPM: scores %v, want none lower than the one before", scores)
+		}
+	}
+	if scores[len(scores)-1]-scores[0] < 5 {
+		t.Errorf("sixteenth power chords at 60 and 180 BPM: scores %v, want 5 apart at least", scores)
+	}
 }
