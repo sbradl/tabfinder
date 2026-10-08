@@ -11,8 +11,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   into drums, bass, rhythm and lead guitar, each with a level from 1 to 10 and tags such
   as `fast`, `syncopated`, `odd meter`, `polyrhythm`, `stretches` or `double kick`.
 - `tabscan`: `-drums`, `-bass`, `-rhythm` and `-lead` filter by a range of levels, `-tag`
-  by tags, `-sort easiest|hardest` orders by difficulty. TSV has two more columns,
-  `difficulty` and `tags`; JSON has the parts.
+  by tags, `-sort easiest|hardest` orders by difficulty. A range of levels only matches
+  songs that have that part. TSV has two more columns, `difficulty` and `tags`; JSON has
+  the parts.
 - Desktop app: each song shows its parts with a meter and the level; "Difficulty…" sets
   a range of levels per part, shown as chips under the fields; a sort menu orders the
   list A–Z, easiest first or hardest first.
@@ -23,6 +24,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   scanned again, once, so songs get their parts.
 - A scan reads all notes now and takes longer: about 0.8 s instead of 0.2 s for a
   library of 950 songs on a desktop.
+
+### Fixed
+
+- Desktop app: a click beside a field closes its suggestions; only Escape did.
 
 ## [1.0.1] - 2026-10-07
 
