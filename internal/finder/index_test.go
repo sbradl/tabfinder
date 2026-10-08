@@ -11,13 +11,45 @@ import (
 	"tabfinder/internal/testlib"
 )
 
+// writeIndexText writes an index of these lines after the header.
 func writeIndexText(t *testing.T, text string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "index.jsonl")
-	if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+	if err := os.WriteFile(p, []byte(IndexHeader+"\n"+text), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return p
+}
+
+func TestLoadIndexOfAnotherVersion(t *testing.T) {
+	// An index from before songs had parts, or of another version, is as good as none:
+	// the app scans the folder again.
+	for _, text := range []string{
+		"{\"path\":\"a\"}\n{\"path\":\"b\"}\n",
+		"{\"tabfinderIndex\":1}\n{\"path\":\"a\"}\n",
+		"{\"tabfinderIndex\":99}\n{\"path\":\"a\"}\n",
+	} {
+		p := filepath.Join(t.TempDir(), "index.jsonl")
+		os.WriteFile(p, []byte(text), 0o644)
+		if songs, err := LoadIndex(p); songs != nil || err != nil {
+			t.Errorf("%q: songs %v, err %v; want none", text, songs, err)
+		}
+	}
+}
+
+func TestScanIndexWritesItsVersion(t *testing.T) {
+	root, index := t.TempDir(), filepath.Join(t.TempDir(), "index.jsonl")
+	os.WriteFile(filepath.Join(root, "a.gp3"), tabfiles.GP(tabfiles.GPSpec{Version: "3.00", Title: "Tin Owl", Tempo: 100}), 0o644)
+	if _, err := ScanIndex(root, index); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(index)
+	if first, _, _ := strings.Cut(string(b), "\n"); first != `{"tabfinderIndex":2}` {
+		t.Errorf("first line %q", first)
+	}
+	if songs, err := LoadIndex(index); err != nil || len(songs) != 1 || songs[0].Title != "Tin Owl" {
+		t.Errorf("loaded back: %v, %v", songs, err)
+	}
 }
 
 func TestLoadIndex(t *testing.T) {
@@ -140,7 +172,7 @@ func TestScanIndex(t *testing.T) {
 		if !strings.Contains(string(raw), "Ruf & Sonne <live>") || !strings.Contains(string(raw), "Die Äther") {
 			t.Errorf("index escaped or mangled:\n%s", raw)
 		}
-		if n := strings.Count(string(raw), "\n"); n != 4 {
+		if n := strings.Count(string(raw), "\n"); n != 5 { // the header, four songs
 			t.Errorf("%d lines", n)
 		}
 	})
@@ -164,14 +196,14 @@ func TestScanIndex(t *testing.T) {
 			t.Errorf("loaded = %v", loaded)
 		}
 	})
-	t.Run("empty folder writes an empty index", func(t *testing.T) {
+	t.Run("empty folder writes an index of no songs", func(t *testing.T) {
 		index := filepath.Join(t.TempDir(), "i.jsonl")
 		songs, err := ScanIndex(t.TempDir(), index)
 		if err != nil || len(songs) != 0 {
 			t.Fatalf("songs = %v, err = %v", songs, err)
 		}
-		if st, err := os.Stat(index); err != nil || st.Size() != 0 {
-			t.Errorf("index: %v, %v", st, err)
+		if raw, err := os.ReadFile(index); err != nil || string(raw) != IndexHeader+"\n" {
+			t.Errorf("index: %q, %v", raw, err)
 		}
 	})
 	t.Run("missing root: error, nothing written, old index kept", func(t *testing.T) {
@@ -180,7 +212,7 @@ func TestScanIndex(t *testing.T) {
 		if err == nil || songs != nil {
 			t.Errorf("songs = %v, err = %v", songs, err)
 		}
-		if raw, _ := os.ReadFile(index); string(raw) != "{\"path\":\"old\"}\n" {
+		if raw, _ := os.ReadFile(index); string(raw) != IndexHeader+"\n{\"path\":\"old\"}\n" {
 			t.Errorf("old index changed: %q", raw)
 		}
 		if _, err := os.Stat(index + ".tmp"); !os.IsNotExist(err) {

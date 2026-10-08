@@ -12,10 +12,15 @@ import (
 	"tabfinder/internal/tab"
 )
 
-// The apps cache a scan as an index file in `tabscan -json` format, so they
-// start without rescanning.
+// The apps cache a scan as an index file, so they start without rescanning: a line
+// IndexHeader, then the songs in `tabscan -json` format.
 
-// LoadIndex reads an index; a missing one is no error.
+// IndexHeader is the first line of an index of this version. An index of another version
+// is ignored, so that a new version of the apps scans again for what it knows of songs
+// (version 2: the parts of a song and how hard they are).
+const IndexHeader = `{"tabfinderIndex":2}`
+
+// LoadIndex reads an index; a missing one, or one of another version, is none and no error.
 func LoadIndex(path string) ([]*tab.Song, error) {
 	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -27,8 +32,17 @@ func LoadIndex(path string) ([]*tab.Song, error) {
 	var songs []*tab.Song
 	sc := bufio.NewScanner(f)
 	sc.Buffer(nil, 16<<20)
+	header := false
 	for sc.Scan() {
-		if len(bytes.TrimSpace(sc.Bytes())) == 0 {
+		line := bytes.TrimSpace(sc.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		if !header {
+			if string(line) != IndexHeader {
+				return nil, nil // another version
+			}
+			header = true
 			continue
 		}
 		var s tab.Song
@@ -48,6 +62,7 @@ func ScanIndex(root, path string) ([]*tab.Song, error) {
 		return nil, scanErr
 	}
 	var buf bytes.Buffer
+	buf.WriteString(IndexHeader + "\n")
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	for _, s := range songs {
