@@ -183,6 +183,22 @@ func TestScorePickingLimit(t *testing.T) {
 	}
 }
 
+func TestScoreTellsHardSongsApart(t *testing.T) {
+	// Four minutes of a run of sixteenths at 200, busy for both hands: the same bar over
+	// and over, or ever changing.
+	run := line(0, [2]int{0, 7}, [2]int{0, 9}, [2]int{1, 7}, [2]int{1, 9}, [2]int{2, 6}, [2]int{2, 7}, [2]int{2, 9}, [2]int{1, 8})
+	var changing [][]score.Beat
+	for i := range 200 {
+		bar := transposed(run, i%9)
+		bar[i%16].Notes = []score.Note{{String: 3, Fret: i%5 + 2}}
+		bar[(i+7)%16].Notes = []score.Note{{String: 4, Fret: i%3 + 2}}
+		changing = append(changing, bar)
+	}
+	same := scoreOf(t, track(200, run).Bars, 200, rhythmGuitar, difficulty.Rhythm)
+	more := scoreOf(t, changing, 200, rhythmGuitar, difficulty.Rhythm)
+	harder(t, "very fast and the same all through, very fast with much to learn", same, more)
+}
+
 func TestScoreRisesWithSpeed(t *testing.T) {
 	var scores []float64
 	for _, bpm := range []int{60, 100, 140, 180} { // four minutes each

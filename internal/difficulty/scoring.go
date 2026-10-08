@@ -13,7 +13,14 @@ import (
 func rating(r Role, bars []bar, plays []int) float64 {
 	hands := either(pickingHand(bars, plays), frettingHand(bars))
 	hard := hands + 0.15*rhythmic(r, bars) + 0.15*learning(bars, plays)
-	return math.Round((1+9*clamp(hard))*10) / 10
+	return math.Round((1+9*soften(hard))*10) / 10
+}
+
+// soften maps how hard a part is, 0 to 1.3 (a hand at its hardest, rhythm and learning
+// too), onto 0 to 1, rising less towards the top: very hard parts still differ.
+func soften(hard float64) float64 {
+	const top, bend = 1.3, 2
+	return (1 - math.Exp(-bend*min(hard, top))) / (1 - math.Exp(-bend*top))
 }
 
 // pickingHand is how hard a part is for the picking hand, from 0 to 1: half how fast it
