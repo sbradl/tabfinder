@@ -19,7 +19,8 @@ const (
 	Lead   Role = "lead"   // lead guitar
 )
 
-var roles = []Role{Drums, Bass, Rhythm, Lead}
+// Roles are all roles, in the order parts come in.
+var Roles = []Role{Drums, Bass, Rhythm, Lead}
 
 // TrackInfo is what the roles of a track are judged by, besides its notes.
 type TrackInfo struct {
@@ -45,7 +46,7 @@ func Analyze(sc *score.Score, tracks []TrackInfo) []Part {
 	played := barsByRole(sc, tracks)
 	poly := polyrhythms(sc, tracks)
 	var out []Part
-	for _, r := range roles {
+	for _, r := range Roles {
 		if bars := partBars(sc, tracks, played[r], poly); len(bars) > 0 {
 			out = append(out, newPart(r, bars, sc))
 		}

@@ -2,9 +2,11 @@ package main
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
+	"tabfinder/internal/difficulty"
 	"tabfinder/internal/finder"
 	"tabfinder/internal/rows"
 	"tabfinder/internal/tab"
@@ -36,6 +38,90 @@ func TestSessionSearch(t *testing.T) {
 	if s.in != (finder.Query{}) {
 		t.Errorf("query after clearing = %+v", s.in)
 	}
+}
+
+func titlesOf(s *session) []string {
+	out := []string{}
+	for _, i := range s.result.Matches {
+		out = append(out, s.lib.Entries[i].Song.Title)
+	}
+	return out
+}
+
+func TestSessionLevels(t *testing.T) {
+	s := newSession("/tabs", time.Now)
+	s.setSongs(testlib.Songs())
+	if lo, hi := s.level(difficulty.Rhythm); lo != 1 || hi != 10 {
+		t.Errorf("no level: %d–%d, want 1–10", lo, hi)
+	}
+	s.setLevel(difficulty.Rhythm, 5, 7)
+	s.search()
+	if got, want := titlesOf(s), []string{"Where Rivers Seem to Rest", "Embrace the Unseen", "Only for the Brave"}; !slices.Equal(sorted(got), sorted(want)) {
+		t.Errorf("rhythm 5–7: %q, want %q", got, want)
+	}
+	if lo, hi := s.level(difficulty.Rhythm); lo != 5 || hi != 7 {
+		t.Errorf("level = %d–%d, want 5–7", lo, hi)
+	}
+	s.setLevel(difficulty.Drums, 7, 10)
+	want := []chip{{difficulty.Drums, "7–10"}, {difficulty.Rhythm, "5–7"}}
+	if got := s.chips(); !slices.Equal(got, want) {
+		t.Errorf("chips = %+v, want %+v", got, want)
+	}
+	// The whole range is no filter: songs without the part, or without parts, count too.
+	s.setLevel(difficulty.Drums, 1, 10)
+	if s.in.Drums != (finder.PartQuery{}) {
+		t.Errorf("drums 1–10 = %+v, want no filter", s.in.Drums)
+	}
+	s.clearLevel(difficulty.Rhythm)
+	if s.in.Active() || len(s.chips()) != 0 {
+		t.Errorf("after clearing: %+v, chips %+v", s.in, s.chips())
+	}
+	// A single level.
+	s.setLevel(difficulty.Lead, 8, 8)
+	s.search()
+	if got := titlesOf(s); !slices.Equal(got, []string{"Only for the Brave"}) {
+		t.Errorf("lead 8: %q", got)
+	}
+	if got := s.chips(); !slices.Equal(got, []chip{{difficulty.Lead, "8"}}) {
+		t.Errorf("chips = %+v", got)
+	}
+	// Open ends, as tabscan takes them, show as the ends of the range.
+	s.in.Bass.Level = "-3"
+	s.in.Lead.Level = "7-"
+	if lo, hi := s.level(difficulty.Bass); lo != 1 || hi != 3 {
+		t.Errorf("bass -3: %d–%d", lo, hi)
+	}
+	if lo, hi := s.level(difficulty.Lead); lo != 7 || hi != 10 {
+		t.Errorf("lead 7-: %d–%d", lo, hi)
+	}
+}
+
+func TestSessionSort(t *testing.T) {
+	s := newSession("/tabs", time.Now)
+	s.setSongs(testlib.Songs())
+	s.setSort(finder.SortHardest)
+	s.search()
+	if got := titlesOf(s); got[0] != "Brass Kettle" {
+		t.Errorf("hardest first: %q", got)
+	}
+	s.setSort(finder.SortEasiest)
+	s.search()
+	if got := titlesOf(s); got[0] != "Paper Ride" {
+		t.Errorf("easiest first: %q", got)
+	}
+	// Clearing the filters keeps the order.
+	s.setLevel(difficulty.Rhythm, 2, 4)
+	s.in.Artist = "x"
+	s.clearQuery()
+	if s.in != (finder.Query{Sort: finder.SortEasiest}) {
+		t.Errorf("query after clearing = %+v", s.in)
+	}
+}
+
+func sorted(s []string) []string {
+	s = slices.Clone(s)
+	slices.Sort(s)
+	return s
 }
 
 func TestSessionTuning(t *testing.T) {

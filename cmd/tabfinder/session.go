@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"tabfinder/internal/difficulty"
 	"tabfinder/internal/finder"
 	"tabfinder/internal/rows"
 	"tabfinder/internal/tab"
@@ -105,4 +106,56 @@ func (s *session) typeTuning(text string) { s.in.Tuning, s.in.Strings = text, 0 
 
 func (s *session) pickTuning(t rows.Tuning) { s.in.Tuning, s.in.Strings = t.Label, t.Strings }
 
-func (s *session) clearQuery() { s.in = finder.Query{} }
+// clearQuery drops the filters; the order stays.
+func (s *session) clearQuery() { s.in = finder.Query{Sort: s.in.Sort} }
+
+func (s *session) setSort(o finder.Sort) { s.in.Sort = o }
+
+// part is the query of a role's part, to change.
+func (s *session) part(r difficulty.Role) *finder.PartQuery {
+	switch r {
+	case difficulty.Drums:
+		return &s.in.Drums
+	case difficulty.Bass:
+		return &s.in.Bass
+	case difficulty.Rhythm:
+		return &s.in.Rhythm
+	}
+	return &s.in.Lead
+}
+
+// level is the range of levels a role's part must be in: 1 to 10 for any.
+func (s *session) level(r difficulty.Role) (lo, hi int) {
+	rg, err := finder.ParseLevelRange(s.part(r).Level)
+	if err != nil {
+		return 1, 10
+	}
+	return max(int(rg.Min), 1), int(min(rg.Max, 10))
+}
+
+// setLevel sets the range of levels of a role's part; 1 to 10 is any, no filter.
+func (s *session) setLevel(r difficulty.Role, lo, hi int) {
+	if lo <= 1 && hi >= 10 {
+		s.clearLevel(r)
+		return
+	}
+	s.part(r).Level = fmt.Sprintf("%d-%d", lo, hi)
+}
+
+func (s *session) clearLevel(r difficulty.Role) { s.part(r).Level = "" }
+
+// chip is a role's level filter in the summary under the fields.
+type chip struct {
+	role difficulty.Role
+	text string
+}
+
+func (s *session) chips() []chip {
+	var out []chip
+	for _, r := range difficulty.Roles {
+		if lo, hi := s.level(r); lo > 1 || hi < 10 {
+			out = append(out, chip{r, rows.LevelChip(lo, hi)})
+		}
+	}
+	return out
+}

@@ -113,11 +113,9 @@ func (q Query) Part(r difficulty.Role) PartQuery {
 	return q.Lead
 }
 
-var roles = []difficulty.Role{difficulty.Drums, difficulty.Bass, difficulty.Rhythm, difficulty.Lead}
-
 func (q Query) Active() bool {
 	parts := false
-	for _, r := range roles {
+	for _, r := range difficulty.Roles {
 		parts = parts || q.Part(r).active()
 	}
 	return q.Name != "" || q.Artist != "" || q.Tuning != "" || q.Strings != 0 || q.BPM != "" || parts
@@ -139,7 +137,7 @@ func (q Query) Filter() (f Filter, bpmInvalid bool) {
 		}
 		bpmInvalid = err != nil
 	}
-	for _, r := range roles {
+	for _, r := range difficulty.Roles {
 		if pf, ok := q.Part(r).filter(); ok {
 			if f.Parts == nil {
 				f.Parts = map[difficulty.Role]PartFilter{}
@@ -168,7 +166,7 @@ func (pq PartQuery) filter() (pf PartFilter, ok bool) {
 // LevelInvalid is the roles whose level range can't be parsed; nil if none.
 func (q Query) LevelInvalid() map[difficulty.Role]bool {
 	var out map[difficulty.Role]bool
-	for _, r := range roles {
+	for _, r := range difficulty.Roles {
 		if lv := strings.TrimSpace(q.Part(r).Level); lv != "" {
 			if _, err := ParseLevelRange(lv); err != nil {
 				if out == nil {
@@ -208,7 +206,7 @@ func (l *Library) sortBy(idx []int, q Query) {
 		return
 	}
 	var searched []difficulty.Role
-	for _, r := range roles {
+	for _, r := range difficulty.Roles {
 		if q.Part(r).active() {
 			searched = append(searched, r)
 		}
