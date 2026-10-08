@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"tabfinder/internal/tabfiles"
+	"tabfinder/internal/testlib"
 )
 
 // ratedTree is a made-up library of songs with notes: a slow one, a fast one with drums,
@@ -97,6 +98,45 @@ func TestCLIBadPartFilters(t *testing.T) {
 		// The flag package reports -tag's errors as "invalid value ... for flag -tag".
 		if code != 2 || out != "" || !strings.HasPrefix(errOut, "tabscan: ") && !strings.Contains(errOut, "flag "+args[0]) {
 			t.Errorf("%q: exit %d, stdout %q, stderr %q", args, code, out, errOut)
+		}
+	}
+}
+
+// TestServeParts is what the app's difficulty filters and sort ask for: a range of levels per
+// part, and the order of the matches.
+func TestServeParts(t *testing.T) {
+	index := filepath.Join(t.TempDir(), "index.jsonl")
+	testlib.WriteIndex(t, index, testlib.Songs())
+	load := req(map[string]any{"op": "load", "index": index})
+	for _, c := range []struct {
+		name  string
+		query map[string]any
+		want  []string // titles of the matches, in order
+	}{
+		{"rhythm 5-7", map[string]any{"rhythm": "5-7"}, []string{"Where Rivers Seem to Rest", "Embrace the Unseen", "Only for the Brave"}},
+		{"rhythm 5-7, hardest first", map[string]any{"rhythm": "5-7", "sort": "hardest"}, []string{"Only for the Brave", "Embrace the Unseen", "Where Rivers Seem to Rest"}},
+		{"easy drums: songs with drums", map[string]any{"drums": "-3"}, []string{"Ruf nach Sonne"}},
+		{"bass and lead", map[string]any{"bass": "5-", "lead": "9"}, []string{"Brass Kettle"}},
+		{"with another field", map[string]any{"artist": "inkwell", "rhythm": "-6"}, []string{"Embrace the Unseen", "Paper Ride"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := session(t, load, req(map[string]any{"op": "search", "query": c.query}))
+			if got := titlesOf(t, r[0], r[1]); !slices.Equal(got, c.want) {
+				t.Errorf("titles %q, want %q", got, c.want)
+			}
+		})
+	}
+	// Easiest first: songs with parts by their hardest part, those without last.
+	r := session(t, load, req(map[string]any{"op": "search", "query": map[string]any{"sort": "easiest"}}))
+	got := titlesOf(t, r[0], r[1])
+	if len(got) != len(testlib.Songs()) || got[0] != "Paper Ride" || slices.Index(got, "Brass Kettle") != 5 {
+		t.Errorf("easiest first: %q", got)
+	}
+	// The rows carry the parts, for the app to show.
+	for _, s := range list(t, r[0], "songs") {
+		song := s.(map[string]any)
+		if song["title"] == "Brass Kettle" && len(song["parts"].([]any)) != 4 {
+			t.Errorf("Brass Kettle's parts: %v", song["parts"])
 		}
 	}
 }

@@ -15,7 +15,7 @@ import (
 //
 //	{"op":"load","index":"/path/index.jsonl"}               -> {"songs":[...]}
 //	{"op":"scan","root":"/tabs","index":"/path/index.jsonl"} -> {"songs":[...],"summary":"948 tabs, 3 unreadable","warning":"..."}
-//	{"op":"search","query":{"artist":"am","tuning":"drop","strings":0,"name":"","bpm":""}}
+//	{"op":"search","query":{"artist":"am","tuning":"drop","strings":0,"name":"","bpm":"","rhythm":"5-7","sort":"easiest"}}
 //	    -> {"matches":["Amber Marsh/Dusk.gp5"],"bpmInvalid":false,"artists":["Amber Marsh"],"tunings":[...]}
 //
 // Songs are rows (internal/rows), what the app shows. Matches are the paths of the matching
@@ -60,7 +60,7 @@ func serve(in io.Reader, out io.Writer) error {
 				}
 				resp = r
 			case "search":
-				q := finder.Query{Name: req.Query.Name, Artist: req.Query.Artist, Tuning: req.Query.Tuning, BPM: req.Query.BPM, Strings: req.Query.Strings}
+				q := req.Query.finder()
 				res := lib.Search(q)
 				resp = searchResponse{
 					Matches:    matchedPaths(lib, res.Matches),
@@ -79,13 +79,28 @@ func serve(in io.Reader, out io.Writer) error {
 	return sc.Err()
 }
 
-// query is the filter fields as the app sends them (finder.Query).
+// query is the filter fields as the app sends them (finder.Query): the parts by a range of
+// levels each ("5-7"), and the order of the matches ("", "easiest" or "hardest").
 type query struct {
 	Name    string `json:"name"`
 	Artist  string `json:"artist"`
 	Tuning  string `json:"tuning"`
 	BPM     string `json:"bpm"`
 	Strings int    `json:"strings"`
+	Drums   string `json:"drums"`
+	Bass    string `json:"bass"`
+	Rhythm  string `json:"rhythm"`
+	Lead    string `json:"lead"`
+	Sort    string `json:"sort"`
+}
+
+func (q query) finder() finder.Query {
+	return finder.Query{
+		Name: q.Name, Artist: q.Artist, Tuning: q.Tuning, BPM: q.BPM, Strings: q.Strings,
+		Drums: finder.PartQuery{Level: q.Drums}, Bass: finder.PartQuery{Level: q.Bass},
+		Rhythm: finder.PartQuery{Level: q.Rhythm}, Lead: finder.PartQuery{Level: q.Lead},
+		Sort: finder.Sort(q.Sort),
+	}
 }
 
 type errorResponse struct {
