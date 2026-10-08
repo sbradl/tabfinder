@@ -650,11 +650,14 @@ func TestTagPolyrhythm(t *testing.T) {
 		{"groups of three sixteenths", []score.Track{{Bars: grouped(8, 3)}}, rhythmGuitar, false, true},
 		{"groups of five sixteenths over a rock beat", []score.Track{drumsTrack, {Bars: grouped(8, 5)}}, both, false, true},
 		{"groups of four", []score.Track{{Bars: grouped(8, 4)}}, rhythmGuitar, false, false},
+		// One passage is enough: the band has to get it right.
+		{"a passage of groups of three in a long song", []score.Track{{Bars: slices.Concat(
+			track(24, every(e, powerChord...)).Bars, grouped(4, 3), track(24, every(e, powerChord...)).Bars)}}, rhythmGuitar, false, true},
 		{"3-3-2 in every bar", []score.Track{track(8, at(0, 3*e, 6*e))}, rhythmGuitar, false, false},
 		{"straight eighths with a rock beat", []score.Track{drumsTrack, track(8, every(e, powerChord...))}, both, false, false},
 	}
 	for _, tt := range tests {
-		sc := &score.Score{Bars: bars4(8, 120), Tracks: tt.tracks}
+		sc := &score.Score{Bars: bars4(len(tt.tracks[len(tt.tracks)-1].Bars), 120), Tracks: tt.tracks}
 		got := map[difficulty.Role]bool{}
 		for _, p := range difficulty.Analyze(sc, tt.info) {
 			got[p.Role] = slices.Contains(p.Tags, "polyrhythm")
