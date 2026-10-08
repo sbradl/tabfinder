@@ -607,7 +607,12 @@ func isBass(t TrackInfo) bool {
 	return (n == 4 || n == 5) && t.Pitches[0] < 40 // below a guitar's low E
 }
 
+// isGuitar reports whether a track is a guitar: named so, with six strings or more, the
+// lowest no higher than an E3 (a guitar tuned up a lot; a violin's G3 is too high).
 func isGuitar(t TrackInfo) bool {
+	if len(t.Pitches) < 6 || t.Pitches[0] > 52 {
+		return false // sung, or no guitar's strings
+	}
 	return strings.Contains(t.Instrument, "Guitar") || reGuitarName.MatchString(t.Name)
 }
 
