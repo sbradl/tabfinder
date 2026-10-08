@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-08
+
 ### Added
 
 - Difficulty per part: the notes of Guitar Pro 3–7 files are read and each song is split
@@ -76,6 +78,7 @@ First release.
 - Errors from the folder dialog, a corrupt `config.json` and index writes are now
   reported instead of being ignored.
 
-[Unreleased]: https://github.com/sbradl/tabfinder/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/sbradl/tabfinder/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/sbradl/tabfinder/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/sbradl/tabfinder/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sbradl/tabfinder/releases/tag/v1.0.0
