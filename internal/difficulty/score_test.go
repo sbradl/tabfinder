@@ -43,6 +43,35 @@ func TestScoreRange(t *testing.T) {
 	}
 }
 
+// line is a bar of sixteenths on the low strings, a note from each pair (string, fret)
+// in turn, with fx.
+func line(fx score.Fx, notes ...[2]int) []score.Beat {
+	var out []score.Beat
+	for i := range 16 {
+		n := notes[i%len(notes)]
+		out = append(out, score.Beat{Start: i * s, Dur: s, Notes: []score.Note{{String: n[0], Fret: n[1], Fx: fx}}})
+	}
+	return out
+}
+
+func TestScoreFrettingHand(t *testing.T) {
+	chug := line(score.PalmMute, [2]int{0, 0})
+	pedal := line(0, [2]int{0, 0}, [2]int{1, 3}, [2]int{0, 0}, [2]int{1, 5}, [2]int{0, 0}, [2]int{1, 7}, [2]int{0, 0}, [2]int{1, 5})
+	moving := line(0, [2]int{0, 3}, [2]int{1, 3}, [2]int{0, 5}, [2]int{1, 5}, [2]int{0, 7}, [2]int{1, 7}, [2]int{0, 5}, [2]int{1, 2})
+	scoreBar := func(bar []score.Beat) float64 {
+		return scoreOf(t, track(16, bar).Bars, 140, rhythmGuitar, difficulty.Rhythm)
+	}
+	harder(t, "an open string, a pedal tone riff, all notes fretted", scoreBar(chug), scoreBar(pedal), scoreBar(moving))
+}
+
+func TestScorePickingHand(t *testing.T) {
+	notes := [][2]int{{0, 3}, {0, 5}, {0, 7}, {0, 5}}
+	scoreBar := func(bar []score.Beat) float64 {
+		return scoreOf(t, track(16, bar).Bars, 140, rhythmGuitar, difficulty.Rhythm)
+	}
+	harder(t, "hammer-ons and pull-offs, the same picked", scoreBar(line(score.Legato, notes...)), scoreBar(line(0, notes...)))
+}
+
 func TestScoreRisesWithSpeed(t *testing.T) {
 	riff := track(16, every(s, powerChord...)).Bars
 	var scores []float64
