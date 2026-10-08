@@ -262,7 +262,7 @@ func TestInputs(t *testing.T) {
 	if len(h.u.result.Matches) != 0 {
 		t.Fatalf("expected no matches, got %d", len(h.u.result.Matches))
 	}
-	h.click(500, 594) // "Clear filters", below the centered prompt text
+	h.clickRect(h.buttonRect(h.bodyArea(), &h.u.cta)) // "Clear filters"
 	h.frame()
 	if h.u.in.Active() || h.u.artist.editor.Text() != "" || len(h.u.result.Matches) != 4 {
 		t.Errorf("after Clear filters: query %+v, artist field %q, %d matches", h.u.in, h.u.artist.editor.Text(), len(h.u.result.Matches))

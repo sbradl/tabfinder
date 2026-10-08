@@ -451,6 +451,17 @@ is drawn above the list).
 - [x] E-DSK-30 Memory: after loading 2000 synthetic songs and 3 seconds, live
   heap < 30 MB (`runtime.ReadMemStats` after `FreeOSMemory`).
 
+**Difficulty**
+- [x] E-DSK-31 "Difficulty…" opens a popup with a range slider (1–10) per role;
+  dragging a thumb or clicking the track narrows the list at once; Escape, Done
+  and a click beside the popup close it, and that click opens no song; a click
+  on the popup itself doesn't; Reset clears every range.
+- [x] E-DSK-32 A chip per role with a range, in a line after the button; its ✕
+  drops that range only; "Clear filters" drops them all.
+- [x] E-DSK-33 Sort menu in the top bar: A–Z, easiest first, hardest first (songs
+  without parts last); the button shows the order; a click beside the open menu
+  closes it and changes nothing.
+
 ### Android app (device tests, `android/app/src/androidTest`)
 
 Only what needs a device runs on one: Android's storage access (`AccessTest`) and one end-to-end

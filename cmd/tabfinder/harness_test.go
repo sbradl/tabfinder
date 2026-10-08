@@ -94,7 +94,7 @@ func (h *harness) winDp() image.Point { return image.Pt(h.size.X/scale, h.size.Y
 
 // The window's regions, in dp, to search for the elements.
 func (h *harness) topBarArea() rect { return image.Rect(0, 0, h.winDp().X, 80) }
-func (h *harness) filterArea() rect { return image.Rect(0, 80, h.winDp().X, 260) }
+func (h *harness) filterArea() rect { return image.Rect(0, 80, h.winDp().X, 320) }
 func (h *harness) bodyArea() rect   { return image.Rect(0, 80, h.winDp().X, h.winDp().Y) }
 
 func (h *harness) fieldRect(f *field) rect {

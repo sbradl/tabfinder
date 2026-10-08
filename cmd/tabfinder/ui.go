@@ -65,11 +65,12 @@ type ui struct {
 	list                      widget.List
 	rows                      map[string]*gesture.Click // by song path, so a row's hover and press stay with its song
 	folderBtn, rescanBtn, cta widget.Clickable
+	levels
 }
 
 func newUI(redraw func(), d dirs, c clock) *ui {
 	root, rootErr := d.loadRoot()
-	u := &ui{session: newSession(root, c.now), dirs: d, clock: c, redraw: redraw, pal: dark, posts: make(chan func(), 16), rows: map[string]*gesture.Click{}}
+	u := &ui{session: newSession(root, c.now), dirs: d, clock: c, redraw: redraw, pal: dark, posts: make(chan func(), 16), rows: map[string]*gesture.Click{}, levels: newLevels()}
 	if dark, ok := prefersDark(); ok && !dark {
 		u.pal = light
 	}
@@ -169,6 +170,7 @@ func (u *ui) update(gtx C) {
 			p.do()
 		}
 	}
+	u.updateLevels(gtx)
 	u.handleRows(gtx)
 	for _, f := range u.fields() {
 		u.handleField(gtx, f)
@@ -195,6 +197,7 @@ func (u *ui) layout(gtx C) D {
 		layout.Rigid(u.topBar),
 		layout.Flexed(1, u.content),
 	)
+	u.levelsPopup(gtx)
 	u.snackbar(gtx)
 	return D{Size: gtx.Constraints.Max}
 }
@@ -267,6 +270,12 @@ func (u *ui) topBar(gtx C) D {
 					}),
 				)
 			}),
+			layout.Rigid(func(gtx C) D {
+				if u.root == "" {
+					return D{}
+				}
+				return layout.Inset{Right: 8}.Layout(gtx, u.sortButton)
+			}),
 			layout.Rigid(func(gtx C) D { return u.iconButton(gtx, &u.folderBtn, icFolder, "Choose tab folder", true) }),
 			layout.Rigid(func(gtx C) D {
 				return u.iconButton(gtx, &u.rescanBtn, icRefresh, "Rescan", u.root != "" && !u.scanning)
@@ -318,6 +327,8 @@ func (u *ui) filters(gtx C) D {
 					}),
 				)
 			}),
+			layout.Rigid(layout.Spacer{Height: 8}.Layout),
+			layout.Rigid(u.levelsLine),
 		)
 	})
 }
