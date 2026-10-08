@@ -78,6 +78,7 @@ func Analyze(sc *score.Score, tracks []TrackInfo) []Part {
 			}
 		}
 	}
+	poly := polyrhythms(sc, tracks)
 	var out []Part
 	for _, r := range roles {
 		if played[r] == nil {
@@ -98,7 +99,7 @@ func Analyze(sc *score.Score, tracks []TrackInfo) []Part {
 				if b+1 < len(sc.Tracks[i].Bars) {
 					next = sc.Tracks[i].Bars[b+1]
 				}
-				bars = append(bars, bar{i, b, head, sc.Tracks[i].Bars[b], next, tracks[i]})
+				bars = append(bars, bar{i, b, head, sc.Tracks[i].Bars[b], next, tracks[i], poly[i][b]})
 			}
 		}
 		p.Tags = tags(r, bars)
@@ -121,6 +122,7 @@ type bar struct {
 	beats        []score.Beat
 	next         []score.Beat // the track's next bar, nil at the end
 	info         TrackInfo
+	poly         bool // played against another rhythm, see polyrhythms
 }
 
 // fastRate is the notes per second, by role, from which playing counts as fast: about
@@ -175,6 +177,9 @@ func tags(r Role, bars []bar) []string {
 	}
 	if often(bars, func(b bar) bool { return hasTuplet(b.beats, isOddTuplet) }) {
 		out = append(out, "tuplets")
+	}
+	if often(bars, func(b bar) bool { return b.poly }) {
+		out = append(out, "polyrhythm")
 	}
 	return out
 }
