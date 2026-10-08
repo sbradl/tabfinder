@@ -391,7 +391,8 @@ is drawn above the list).
   prefix matches first; exact match disappears; case variants shown once.
 - [x] E-DSK-15 Artist: click a suggestion → field set, menu closed, list
   filtered; the field's change event doesn't reopen the menu.
-- [x] E-DSK-16 Enter picks the first suggestion; Escape closes; Down and a click
+- [x] E-DSK-16 Enter picks the first suggestion; Escape and a click beside the field
+  and its menu close (the latter also leaves the field); Down and a click
   on the focused field reopen (existing `TestReopenSuggestions`, extend to tuning).
 - [x] E-DSK-17 Tuning: grouped under "N STRINGS" headers in the order 6, 7, 8, 9,
   4, 5; notes shown right-aligned; custom tunings show their notes as the label
