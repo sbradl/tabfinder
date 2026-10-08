@@ -68,11 +68,17 @@ func unevenBeats(b bar) (struck, uneven int) {
 }
 
 // strikesByBeat is when notes are struck in a bar, by quarter note.
-func strikesByBeat(b bar) map[int][]int {
-	out := map[int][]int{}
+func strikesByBeat(b bar) [][]int {
+	var out [][]int
 	for _, beat := range b.beats { // sorted by start
+		if !beat.Struck() {
+			continue
+		}
 		k := beat.Start / score.Quarter
-		if l := out[k]; beat.Struck() && (len(l) == 0 || l[len(l)-1] != beat.Start) {
+		for len(out) <= k {
+			out = append(out, nil)
+		}
+		if l := out[k]; len(l) == 0 || l[len(l)-1] != beat.Start {
 			out[k] = append(l, beat.Start)
 		}
 	}
@@ -176,10 +182,9 @@ func unpicked(beat score.Beat) bool {
 // gripsPerSecond is how often the fretting hand puts fingers down in a bar: beats with a
 // fretted note not played within the quarter note before, where a finger may still be.
 // Open strings and repeated notes are free; a stretch counts double.
-func gripsPerSecond(b bar) float64 {
-	type finger struct{ string, fret int }
-	lastPlayed := map[finger]int{} // when
-	quarters := quarterGrips(b)
+func gripsPerSecond(b bar, quarters []grip) float64 {
+	type finger struct{ string, fret, when int }
+	var fingers []finger // where fingers were put down, and when last
 	grips := 0
 	for _, beat := range b.beats {
 		changed := false
@@ -187,11 +192,17 @@ func gripsPerSecond(b bar) float64 {
 			if !fretted(n) {
 				continue
 			}
-			f := finger{n.String, n.Fret}
-			if t, ok := lastPlayed[f]; !ok || beat.Start-t > score.Quarter {
+			i := slices.IndexFunc(fingers, func(f finger) bool { return f.string == n.String && f.fret == n.Fret })
+			switch {
+			case i < 0:
+				fingers = append(fingers, finger{n.String, n.Fret, beat.Start})
 				changed = true
+			case beat.Start-fingers[i].when > score.Quarter:
+				changed = true
+				fallthrough
+			default:
+				fingers[i].when = beat.Start
 			}
-			lastPlayed[f] = beat.Start
 		}
 		switch {
 		case !changed:

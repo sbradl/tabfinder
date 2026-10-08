@@ -38,13 +38,17 @@ func longestFast(bars []bar, fast float64) float64 {
 func syncopated(b bar, drums bool) bool {
 	onsets := onsetTimes(b.beats, drums)
 	// What comes after the last off-beat: the next bar's downbeat, unknown at the end.
-	nextDownbeat := b.next == nil || onsetTimes(b.next, drums)[0]
+	nextDownbeat := b.next == nil
+	if next := onsetTimes(b.next, drums); len(next) > 0 && next[0] == 0 {
+		nextDownbeat = true
+	}
 	syncopes := 0
-	for t := range onsets {
+	for _, t := range onsets {
 		stronger, offBeat := strongerAfter(t)
+		_, struckThen := slices.BinarySearch(onsets, stronger)
 		switch {
 		case !offBeat:
-		case stronger < b.ticks() && !onsets[stronger]:
+		case stronger < b.ticks() && !struckThen:
 			syncopes++
 		case stronger >= b.ticks() && !nextDownbeat:
 			syncopes++
@@ -53,12 +57,15 @@ func syncopated(b bar, drums bool) bool {
 	return syncopes > 0 && 4*syncopes >= len(onsets)
 }
 
-// onsetTimes is the times notes are struck in a bar; for drums only kick and snare.
-func onsetTimes(beats []score.Beat, drums bool) map[int]bool {
-	out := map[int]bool{}
-	for _, beat := range beats {
+// onsetTimes is the times notes are struck in a bar, each once, in order; for drums only
+// kick and snare.
+func onsetTimes(beats []score.Beat, drums bool) []int {
+	var out []int
+	for _, beat := range beats { // sorted by start
 		if drums && kickOrSnare(beat) || !drums && beat.Struck() {
-			out[beat.Start] = true
+			if len(out) == 0 || out[len(out)-1] != beat.Start {
+				out = append(out, beat.Start)
+			}
 		}
 	}
 	return out
