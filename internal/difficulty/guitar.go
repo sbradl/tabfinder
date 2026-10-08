@@ -70,7 +70,9 @@ func (g *grip) strain() float64 {
 	return reach(g.lo, g.hi) * (1 + 0.15*float64(skipped)) * (1 + 0.1*lowness)
 }
 
-func (g *grip) stretched() bool { return g.strain() >= stretchReach }
+// stretched reports whether a grip is a stretch: four frets or more (one finger per fret
+// spans three) and a strain of a stretch.
+func (g *grip) stretched() bool { return g.hi-g.lo >= 4 && g.strain() >= stretchReach }
 
 // fretted reports whether a note needs a finger: struck, not open.
 func fretted(n score.Note) bool { return !n.Tie && !n.Dead && n.Fret > 0 }
