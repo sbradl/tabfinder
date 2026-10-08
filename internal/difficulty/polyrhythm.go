@@ -6,10 +6,10 @@ import (
 	"tabfinder/internal/score"
 )
 
-// polyrhythms finds the bars each track plays against another rhythm, by track and bar:
-//   - cross-rhythms: triplets in the same beat as straight off-beats on another track
-//   - displaced groupings: a pattern repeating every few sixteenths that the bars don't
-//     divide, so it starts on a different beat each time (groups of three over 4/4)
+// polyrhythms finds the bars each track plays a polyrhythm in, by track and bar: a
+// grouping repeating every few sixteenths that the bars don't divide, so it starts on a
+// different beat each time (groups of three over 4/4). Triplets over a straight beat
+// are no polyrhythm: they fit the beat.
 func polyrhythms(sc *score.Score, tracks []TrackInfo) []map[int]bool {
 	out := make([]map[int]bool, len(sc.Tracks))
 	mark := func(t, b int) {
@@ -17,39 +17,6 @@ func polyrhythms(sc *score.Score, tracks []TrackInfo) []map[int]bool {
 			out[t] = map[int]bool{}
 		}
 		out[t][b] = true
-	}
-	n := 0
-	for _, t := range sc.Tracks {
-		n = max(n, len(t.Bars))
-	}
-	for b := range n {
-		// The beats (quarter notes) with triplets and with straight off-beats, by track.
-		triplets := make([]uint64, len(sc.Tracks))
-		straight := make([]uint64, len(sc.Tracks))
-		for t := range sc.Tracks {
-			if b >= len(sc.Tracks[t].Bars) {
-				continue
-			}
-			for _, beat := range sc.Tracks[t].Bars[b] {
-				k := beat.Start / score.Quarter
-				if !beat.Struck() || k >= 64 {
-					continue
-				}
-				switch {
-				case isTriplet(beat.Tuplet):
-					triplets[t] |= 1 << k
-				case beat.Tuplet == 0 && beat.Start%score.Quarter != 0:
-					straight[t] |= 1 << k
-				}
-			}
-		}
-		for t := range sc.Tracks {
-			for u := range sc.Tracks {
-				if t != u && triplets[t]&straight[u] != 0 {
-					mark(t, b) // the one playing against the straight pulse
-				}
-			}
-		}
 	}
 	for t := range sc.Tracks {
 		drums := sc.Tracks[t].Drums || t < len(tracks) && tracks[t].Drums
