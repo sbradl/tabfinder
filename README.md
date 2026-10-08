@@ -133,7 +133,7 @@ how much there is to learn. It was fitted to one band's ranking of songs they kn
 treat it as a guide.
 
 `-drums`, `-bass`, `-rhythm` and `-lead` take a range of levels like `-bpm`: `-rhythm 3-5`,
-`-drums -3`. A song without that part matches a range starting at 1. `-tag rhythm:triplets`
+`-drums -3`. A range only matches songs that have that part. `-tag rhythm:triplets`
 asks for a tag (repeat it for more), and `-sort easiest` or `-sort hardest` orders the songs
 by the hardest of the parts searched for.
 

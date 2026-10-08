@@ -53,7 +53,7 @@ func TestCLIPartFilters(t *testing.T) {
 		{"easy rhythm guitar", []string{"-rhythm", "-3"}, []string{"Slow Pines"}},
 		{"hard rhythm guitar", []string{"-rhythm", "5-"}, []string{"Iron Lung"}},
 		{"a tag", []string{"-tag", "rhythm:fast"}, []string{"Iron Lung"}},
-		{"no drums to play is fine", []string{"-drums", "-3"}, []string{"Slow Pines"}},
+		{"a range asks for the part", []string{"-drums", "-10"}, []string{"Iron Lung"}},
 		{"hardest first, not rated last", []string{"-sort", "hardest"}, []string{"Iron Lung", "Slow Pines", "Tin Owl"}},
 		{"easiest first", []string{"-sort", "easiest"}, []string{"Slow Pines", "Iron Lung", "Tin Owl"}},
 	}
