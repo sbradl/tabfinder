@@ -63,16 +63,12 @@ func (f Filter) Matches(s *tab.Song) bool {
 	return true
 }
 
-// matches reports whether a song's part of a role is like this. A song without the part
-// matches a level range from 1 on, with no tags: nobody has to play anything. A song not
-// rated (no notes in the file) matches no part filter.
+// matches reports whether a song's part of a role is like this. A song without the part,
+// or not rated (no notes in the file), matches no part filter.
 func (pf PartFilter) matches(s *tab.Song, r difficulty.Role) bool {
-	if s.Parts == nil {
-		return false
-	}
 	p, ok := partOf(s, r)
 	if !ok {
-		return len(pf.Tags) == 0 && (pf.Level == nil || pf.Level.Min <= 1)
+		return false
 	}
 	if pf.Level != nil && !pf.Level.Contains(float64(p.Level())) {
 		return false

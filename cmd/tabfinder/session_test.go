@@ -67,6 +67,14 @@ func TestSessionLevels(t *testing.T) {
 	if got := s.chips(); !slices.Equal(got, want) {
 		t.Errorf("chips = %+v, want %+v", got, want)
 	}
+	// A range asks for the part: easy drums are songs with drums.
+	s.clearLevel(difficulty.Rhythm)
+	s.setLevel(difficulty.Drums, 1, 3)
+	s.search()
+	if got := titlesOf(s); !slices.Equal(got, []string{"Ruf nach Sonne"}) {
+		t.Errorf("drums 1–3: %q", got)
+	}
+	s.setLevel(difficulty.Rhythm, 5, 7)
 	// The whole range is no filter: songs without the part, or without parts, count too.
 	s.setLevel(difficulty.Drums, 1, 10)
 	if s.in.Drums != (finder.PartQuery{}) {
