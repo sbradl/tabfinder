@@ -136,6 +136,9 @@ func tags(r Role, bars []bar) []string {
 	if often(bars, func(b bar) bool { return rate(b) >= fastRate[r] }) {
 		out = append(out, "fast")
 	}
+	if longestFast(bars, fastRate[r]) >= enduranceSeconds {
+		out = append(out, "endurance")
+	}
 	if often(bars, func(b bar) bool { return syncopated(b, r == Drums) }) {
 		out = append(out, "syncopated")
 	}
@@ -194,6 +197,26 @@ func rate(b bar) float64 {
 		}
 	}
 	return float64(onsets) / seconds(b.head)
+}
+
+// enduranceSeconds is how long playing fast without a break takes stamina.
+const enduranceSeconds = 40
+
+// longestFast is the longest time, in seconds, a track of the part plays fast without a
+// bar that isn't: one bar after the other as written.
+func longestFast(bars []bar, fast float64) float64 {
+	longest, run := 0.0, 0.0
+	prev := bar{track: -1}
+	for _, b := range bars { // by track, then bar
+		if b.track != prev.track || b.index != prev.index+1 || rate(b) < fast {
+			run = 0
+		}
+		if rate(b) >= fast {
+			run += seconds(b.head)
+		}
+		longest, prev = max(longest, run), b
+	}
+	return longest
 }
 
 // syncopated reports whether at least a quarter of a bar's notes are syncopated: struck
