@@ -29,7 +29,7 @@ class SmokeTest : DeviceTest() {
     waitForSongs()
     assertEquals("${Fixture.SONGS} / ${Fixture.SONGS}", counter())
     assertEquals(1, tabscanPids().size)
-    assertEquals(Fixture.SONGS, index.readLines().count { it.isNotBlank() })
+    assertEquals(Fixture.SONGS, index.readLines().drop(1).count { it.isNotBlank() }) // after the version line
 
     // E-AND-04: a search answered by it.
     compose.onNodeWithTag("field-tuning").performTextInput("drop c")
