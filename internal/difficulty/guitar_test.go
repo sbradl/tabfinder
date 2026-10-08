@@ -73,8 +73,12 @@ func TestTagChordsAndStretches(t *testing.T) {
 		// One finger per fret spans three; frets get narrower up the neck.
 		{"four frets low on the neck", every(q, shape(-1, 1, -1, 5, -1, -1)...), false, true},
 		{"four frets at the 3rd", every(q, shape(3, -1, -1, 7, -1, -1)...), false, true},
-		{"three frets", every(q, shape(3, -1, -1, 6, -1, -1)...), false, false},
-		{"five frets at the 12th", every(q, shape(-1, -1, -1, 12, -1, 17)...), false, false},
+		{"three frets on the high strings", every(q, shape(-1, -1, -1, -1, 3, 6)...), false, false},
+		{"five frets at the 12th", every(q, shape(-1, -1, -1, -1, 12, 17)...), false, false},
+		// Skipping strings makes a reach longer, and so do the low strings.
+		{"three frets, skipping a string", every(q, shape(-1, -1, 3, -1, 6, -1)...), false, true},
+		{"four frets at the 8th on the high strings", every(q, shape(-1, -1, -1, -1, 8, 12)...), false, false},
+		{"four frets at the 8th on the low strings", every(q, shape(8, 12, -1, -1, -1, -1)...), false, true},
 		{"shift along a string", slide, false, false},
 	}
 	for _, tt := range tests {
