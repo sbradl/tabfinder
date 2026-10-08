@@ -21,10 +21,10 @@ func longestFast(bars []bar, fast float64) float64 {
 	longest, run := 0.0, 0.0
 	prev := bar{track: -1}
 	for _, b := range bars { // by track, then bar
-		if b.track != prev.track || b.index != prev.index+1 || rate(b) < fast {
+		if b.track != prev.track || b.index != prev.index+1 || b.rate < fast {
 			run = 0
 		}
-		if rate(b) >= fast {
+		if b.rate >= fast {
 			run += b.seconds()
 		}
 		longest, prev = max(longest, run), b
