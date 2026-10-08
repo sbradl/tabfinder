@@ -77,7 +77,7 @@ the cache under a name it can open.
 | File | Contents |
 |---|---|
 | `~/.config/tabfinder/config.json` | `{"root": "<tab folder>"}` |
-| `~/.cache/tabfinder/index.jsonl` | The last scan (`tabscan -json` format) |
+| `~/.cache/tabfinder/index.jsonl` | The last scan: a version line, then `tabscan -json` format |
 
 `XDG_CONFIG_HOME` and `XDG_CACHE_HOME` are respected.
 
@@ -99,15 +99,36 @@ Use the release build (`mise run apk`). Debug builds are noticeably slower when 
 ```sh
 mise run cli   # builds ./tabscan and ./tabreorg
 
-tabscan ~/Guitar/Tabs                                 # TSV: path, artist, album, title, tempo, instruments, tunings
+tabscan ~/Guitar/Tabs                                 # TSV: path, artist, album, title, tempo, instruments, tunings, difficulty, tags
 tabscan -tuning "drop c" -bpm 100-140 ~/Guitar/Tabs   # filter
-tabscan -json ~/Guitar/Tabs                           # one JSON object per file, with per-track details
+tabscan -drums -3 -rhythm 3-5 -sort hardest ~/Guitar/Tabs   # by how hard the parts are
+tabscan -json ~/Guitar/Tabs                           # one JSON object per file, with per-track details and parts
 ```
 
 The filters are `-name` (all words in the title or file name), `-artist`, `-tuning` (a
 name such as `"eb standard"`, or notes such as `"D A D G A D"`) and `-bpm` (`120`,
 `100-140`, `180-`, `-90`). `-root` sets the base folder used for the Artist/Album
 fallback.
+
+### Difficulty
+
+For Guitar Pro files, `tabscan` reads the notes and splits each song into parts: drums,
+bass, rhythm guitar and lead guitar. A guitar track can play both: each bar is rhythm or
+lead by what's played in it. Each part gets a level from 1 to 10 and tags for what makes
+it hard: `fast`, `endurance`, `syncopated`, `triplets`, `tuplets`, `polyrhythm`, `odd meter`,
+`meter changes`, `stretches`, `chords`, `sweeps`, `bends`, `tapping`, `legato`, `harmonics`,
+`tremolo picking`, `slap`, `ghost notes`, `double kick`, `blast beats`, `repetitive` and
+`many parts`. TuxGuitar and Power Tab files aren't rated.
+
+The level weighs what the part asks of the picking hand (how fast, and for how long) and
+of the fretting hand (how often it moves, stretches counting double), plus its rhythm and
+how much there is to learn. It was fitted to one band's ranking of songs they know, so
+treat it as a guide.
+
+`-drums`, `-bass`, `-rhythm` and `-lead` take a range of levels like `-bpm`: `-rhythm 3-5`,
+`-drums -3`. A song without that part matches a range starting at 1. `-tag rhythm:triplets`
+asks for a tag (repeat it for more), and `-sort easiest` or `-sort hardest` orders the songs
+by the hardest of the parts searched for.
 
 ## tabreorg
 
