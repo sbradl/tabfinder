@@ -17,6 +17,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Desktop app: each song shows its parts with a meter and the level; "Difficulty…" sets
   a range of levels per part, shown as chips under the fields; a sort menu orders the
   list A–Z, easiest first or hardest first.
+- Android app: the same as the desktop app: parts with a meter on each song, "Difficulty…"
+  with a range slider per part, chips, and a sort menu in the top bar.
 
 ### Changed
 
