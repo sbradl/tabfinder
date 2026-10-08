@@ -571,6 +571,57 @@ func TestTagStructure(t *testing.T) {
 	}
 }
 
+func TestTagStructureDrumsIgnoresCymbals(t *testing.T) {
+	ride, crash := score.Note{Fret: 51}, score.Note{Fret: 49}
+	withCymbal := func(c score.Note, crashOn1 bool) []score.Beat {
+		bar := rockBeat()
+		for i := range bar {
+			for j := range bar[i].Notes {
+				if bar[i].Notes[j] == hat {
+					bar[i].Notes = slices.Clone(bar[i].Notes)
+					bar[i].Notes[j] = c
+				}
+			}
+		}
+		if crashOn1 {
+			bar[0].Notes = []score.Note{kick, crash}
+		}
+		return bar
+	}
+	var bars [][]score.Beat
+	for i := range 40 {
+		bars = append(bars, withCymbal([]score.Note{hat, ride}[i/20], i%4 == 0))
+	}
+	sc := &score.Score{Bars: bars4(40, 120), Tracks: []score.Track{{Drums: true, Bars: bars}}}
+	tags := tagsOf(t, sc, drumKit, difficulty.Drums)
+	if !slices.Contains(tags, "repetitive") || slices.Contains(tags, "many parts") {
+		t.Errorf("one beat, hi-hat or ride, crash every 4th bar: tags %v, want repetitive", tags)
+	}
+}
+
+func TestTagStructureDrumFillsAreNoNewPart(t *testing.T) {
+	toms := []score.Note{{Fret: 50}, {Fret: 48}, {Fret: 45}, {Fret: 43}, {Fret: 41}}
+	fill := func(n int) []score.Beat { // the beat for two beats, then sixteenths on the toms
+		bar := slices.Clone(rockBeat()[:8])
+		for i := range 8 {
+			bar = append(bar, score.Beat{Start: 2*q + i*s, Dur: s, Notes: []score.Note{toms[(n+i*(n%3+1))%len(toms)]}})
+		}
+		return bar
+	}
+	var bars [][]score.Beat
+	for i := range 40 {
+		if i%4 == 3 {
+			bars = append(bars, fill(i/4))
+		} else {
+			bars = append(bars, rockBeat())
+		}
+	}
+	sc := &score.Score{Bars: bars4(40, 120), Tracks: []score.Track{{Drums: true, Bars: bars}}}
+	if tags := tagsOf(t, sc, drumKit, difficulty.Drums); !slices.Contains(tags, "repetitive") {
+		t.Errorf("one beat with ten different fills: tags %v, want repetitive", tags)
+	}
+}
+
 // melody is a bar of single sixteenth notes up and down the B and high E strings
 // around the 12th fret, with fx on every fourth note.
 func melody(fx score.Fx) []score.Beat {

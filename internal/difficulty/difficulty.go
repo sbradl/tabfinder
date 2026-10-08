@@ -578,8 +578,9 @@ func isGuitar(t TrackInfo) bool {
 }
 
 // manyBars is the number of different bars from which a part has much to learn: eight
-// sections of four bars.
-const manyBars = 24
+// sections of four bars, all different. In a library of mostly metal songs about a
+// quarter of the guitar parts have that many.
+const manyBars = 32
 
 // material is how much there is to learn of a part: the number of different bars on the
 // track that has the most, and how many bars that track plays, repeats included. A bar
@@ -599,7 +600,12 @@ func material(bars []bar, plays []int) (distinct, played int) {
 				n++
 			}
 			o := onsets(b)
-			if !slices.ContainsFunc(kinds, func(k []onset) bool { return alike(k, o) }) {
+			same := func(k []onset) bool { return alike(k, o) }
+			if b.info.Drums { // a fill: a known groove for the first half of the bar
+				half := barTicks(b.head) / 2
+				same = func(k []onset) bool { return alike(before(k, half), before(o, half)) }
+			}
+			if !slices.ContainsFunc(kinds, same) {
 				kinds = append(kinds, o)
 			}
 		}
@@ -650,6 +656,15 @@ func onsets(b bar) []onset {
 		out = append(out, onset{beat.Start, sb.String()})
 	}
 	return out
+}
+
+// before is the onsets before a time.
+func before(os []onset, t int) []onset {
+	i := 0
+	for i < len(os) && os[i].start < t {
+		i++
+	}
+	return os[:i]
 }
 
 // alike reports whether two bars are the same but for a note or two: the same rhythm, with
