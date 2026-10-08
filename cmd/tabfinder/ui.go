@@ -740,14 +740,8 @@ func (u *ui) songRow(gtx C, click *gesture.Click, r rows.Song) D {
 					}),
 					layout.Rigid(func(gtx C) D {
 						switch {
-						case len(r.Tunings) > 0:
-							return layout.Inset{Top: 10}.Layout(gtx, func(gtx C) D {
-								tags := make([]layout.Widget, len(r.Tunings))
-								for i, t := range r.Tunings {
-									tags[i] = func(gtx C) D { return u.tuningTag(gtx, t) }
-								}
-								return flow(gtx, gtx.Dp(6), tags)
-							})
+						case len(r.Tunings) > 0 || len(r.Parts) > 0:
+							return layout.Inset{Top: 10}.Layout(gtx, func(gtx C) D { return u.tagsAndParts(gtx, r) })
 						case r.Unreadable:
 							return layout.Inset{Top: 10}.Layout(gtx, func(gtx C) D {
 								return u.text(gtx, labelSmall, u.pal.err, "Couldn't read this file")
@@ -769,6 +763,39 @@ func (u *ui) songRow(gtx C, click *gesture.Click, r rows.Song) D {
 	pointer.CursorPointer.Add(gtx.Ops)
 	area.Pop()
 	return dims
+}
+
+// tagsAndParts is the row's tuning tags, and its parts at the right; on a line of their
+// own below the tags when both don't fit on one.
+func (u *ui) tagsAndParts(gtx C, r rows.Song) D {
+	gtx.Constraints.Min = image.Point{}
+	width := gtx.Constraints.Max.X
+	rec := op.Record(gtx.Ops)
+	tags := make([]layout.Widget, len(r.Tunings))
+	for i, t := range r.Tunings {
+		tags[i] = func(gtx C) D { return u.tuningTag(gtx, t) }
+	}
+	td := flow(gtx, gtx.Dp(6), tags)
+	tagsCall := rec.Stop()
+	rec = op.Record(gtx.Ops)
+	pd := u.parts(gtx, r.Parts)
+	partsCall := rec.Stop()
+
+	tagsCall.Add(gtx.Ops)
+	var at image.Point
+	switch {
+	case len(r.Parts) == 0:
+		return td
+	case len(r.Tunings) == 0:
+	case td.Size.X+gtx.Dp(24)+pd.Size.X <= width:
+		at = image.Pt(width-pd.Size.X, (td.Size.Y-pd.Size.Y)/2)
+	default:
+		at = image.Pt(0, td.Size.Y+gtx.Dp(10))
+	}
+	off := op.Offset(at).Push(gtx.Ops)
+	partsCall.Add(gtx.Ops)
+	off.Pop()
+	return D{Size: image.Pt(max(td.Size.X, at.X+pd.Size.X), max(td.Size.Y, at.Y+pd.Size.Y))}
 }
 
 // tempo shows the opening tempo, large, with later tempo changes beneath.

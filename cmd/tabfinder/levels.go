@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"strconv"
 
 	"gioui.org/f32"
 	"gioui.org/gesture"
@@ -571,4 +572,74 @@ func (u *ui) roleIcon(gtx C, r difficulty.Role, size unit.Dp, c color.NRGBA) D {
 		})
 	}
 	return D{Size: image.Pt(int(s), int(s))}
+}
+
+// --- parts on the rows ---
+
+// levelColor is a level's color, green for 1 to red for 10.
+func levelColor(level int) color.NRGBA {
+	hue := 120 * float64(10-min(max(level, 1), 10)) / 9 // degrees
+	const s, v = 0.75, 0.85
+	c := v * s
+	x := c * (1 - math.Abs(math.Mod(hue/60, 2)-1))
+	var r, g float64
+	if hue < 60 {
+		r, g = c, x
+	} else {
+		r, g = x, c
+	}
+	m := v - c
+	to := func(f float64) uint8 { return uint8(math.Round((f + m) * 255)) }
+	return color.NRGBA{R: to(r), G: to(g), B: to(0), A: 0xff}
+}
+
+// meterBar is the i'th of the meter's five bars, in dp: each taller than the one before.
+func meterBar(i int) image.Rectangle {
+	h := 6 + 3*i
+	return image.Rect(i*6, 18-h, i*6+4, 18)
+}
+
+// meter shows a level as five rising bars, two levels each; an odd level lights the
+// lower half of its last bar.
+func (u *ui) meter(gtx C, level int) D {
+	dp := func(r image.Rectangle) image.Rectangle {
+		return image.Rect(gtx.Dp(unit.Dp(r.Min.X)), gtx.Dp(unit.Dp(r.Min.Y)), gtx.Dp(unit.Dp(r.Max.X)), gtx.Dp(unit.Dp(r.Max.Y)))
+	}
+	lit := levelColor(level)
+	for i := range 5 {
+		b := meterBar(i)
+		paint.FillShape(gtx.Ops, u.pal.outline, clip.Rect(dp(b)).Op())
+		switch {
+		case level >= 2*(i+1):
+			paint.FillShape(gtx.Ops, lit, clip.Rect(dp(b)).Op())
+		case level == 2*i+1:
+			b.Min.Y = b.Max.Y - b.Dy()/2
+			paint.FillShape(gtx.Ops, lit, clip.Rect(dp(b)).Op())
+		}
+	}
+	return D{Size: dp(image.Rect(0, 0, meterBar(4).Max.X, 18)).Max}
+}
+
+// parts shows a song's parts: per part its instrument, a meter and the level.
+func (u *ui) parts(gtx C, ps []rows.Part) D {
+	children := make([]layout.FlexChild, 0, len(ps))
+	for i, p := range ps {
+		children = append(children, layout.Rigid(func(gtx C) D {
+			gtx.Constraints.Min = image.Point{}
+			left := unit.Dp(0)
+			if i > 0 {
+				left = 14
+			}
+			return layout.Inset{Left: left}.Layout(gtx, func(gtx C) D {
+				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+					layout.Rigid(func(gtx C) D { return u.roleIcon(gtx, difficulty.Role(p.Role), 18, u.pal.fgMuted) }),
+					layout.Rigid(layout.Spacer{Width: 5}.Layout),
+					layout.Rigid(func(gtx C) D { return u.meter(gtx, p.Level) }),
+					layout.Rigid(layout.Spacer{Width: 5}.Layout),
+					layout.Rigid(func(gtx C) D { return u.text(gtx, style{monoBold, 14}, u.pal.fg, strconv.Itoa(p.Level)) }),
+				)
+			})
+		}))
+	}
+	return layout.Flex{Alignment: layout.Middle}.Layout(gtx, children...)
 }
