@@ -504,6 +504,14 @@ set the folder through the preferences.
 - [ ] E-AND-12 *(`scripts/perf-device.sh`, written, not run: it drives your real release app)* Performance on the tablet: cold start to list < 1 s with a
   950-song index; scroll jank < 5% (`dumpsys gfxinfo`) on a release build
   compiled with `cmd package compile -m speed` (see `mise.toml`).
+- [x] E-AND-13 *(JVM: `DifficultyScreenTest`)* A row shows per part its instrument, a meter and
+  the level; a song without parts shows none. Meter colors green for 1 to red for 10, 3:1
+  against the background in both themes (`LevelColorTest`).
+- [x] E-AND-14 *(JVM)* "Difficulty…" opens a dialog with a range slider per part; moving one
+  narrows the list at once; Done leaves a chip ("6–7"), its ✕ drops that range, Reset all.
+  A range asks for the part: easy drums are songs with drums.
+- [x] E-AND-15 *(JVM)* The sort button in the top bar orders the list A–Z, easiest or hardest
+  first, and shows the order.
 
 ## Status and findings
 

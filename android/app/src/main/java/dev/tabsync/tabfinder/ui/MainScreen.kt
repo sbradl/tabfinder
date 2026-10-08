@@ -84,6 +84,7 @@ fun MainScreen(
   val results by viewModel.results.collectAsStateWithLifecycle()
   val snackbar = remember { SnackbarHostState() }
   val scope = rememberCoroutineScope()
+  var levelsOpen by remember { mutableStateOf(false) }
 
   LaunchedEffect(state.message) {
     state.message?.let {
@@ -108,6 +109,7 @@ fun MainScreen(
           }
         },
         actions = {
+          if (hasAccess && state.root != null) SortButton(input.sort, viewModel::setSort)
           if (hasAccess) {
             IconButton(onClick = onPickFolder) { Icon(painterResource(R.drawable.ic_folder), "Choose tab folder") }
             IconButton(onClick = viewModel::rescan, enabled = state.root != null && !state.scanning) {
@@ -134,7 +136,17 @@ fun MainScreen(
             matching = results?.songs?.size ?: 0,
             total = state.songs.size,
             onChange = { viewModel.input.value = it },
+            onLevels = { levelsOpen = true },
+            onClearLevel = viewModel::clearLevel,
           )
+          if (levelsOpen) {
+            LevelsDialog(
+              input,
+              onLevel = viewModel::setLevel,
+              onReset = { Role.entries.forEach(viewModel::clearLevel) },
+              onDone = { levelsOpen = false },
+            )
+          }
           // Rows draw their own top divider, so the first one closes off the filter panel.
           if (state.scanning) LinearProgressIndicator(Modifier.fillMaxWidth())
           when (listContent(results, state, input)) {
@@ -184,7 +196,15 @@ private fun Prompt(title: String, text: String, action: String, modifier: Modifi
 }
 
 @Composable
-private fun Filters(input: Query, suggestions: SearchResult, matching: Int, total: Int, onChange: (Query) -> Unit) {
+private fun Filters(
+  input: Query,
+  suggestions: SearchResult,
+  matching: Int,
+  total: Int,
+  onChange: (Query) -> Unit,
+  onLevels: () -> Unit,
+  onClearLevel: (Role) -> Unit,
+) {
   Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
     BoxWithConstraints(Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp)) {
       val wide = maxWidth >= 600.dp
@@ -241,6 +261,7 @@ private fun Filters(input: Query, suggestions: SearchResult, matching: Int, tota
             modifier = Modifier.padding(horizontal = 8.dp).testTag("counter"),
           )
         }
+        LevelsLine(input, onLevels, onClearLevel)
       }
     }
   }
@@ -373,9 +394,17 @@ private fun SongRow(song: Song, modifier: Modifier = Modifier) {
         }
         TempoText(song, Modifier.padding(start = 12.dp))
       }
-      if (song.tunings.isNotEmpty()) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      if (song.tunings.isNotEmpty() || song.parts.isNotEmpty()) {
+        // The parts at the right of the tuning tags, or on a line of their own when both don't fit.
+        FlowRow(
+          horizontalArrangement = Arrangement.spacedBy(6.dp),
+          verticalArrangement = Arrangement.spacedBy(6.dp),
+          itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
           song.tunings.forEach { TuningTag(it) }
+          if (song.parts.isNotEmpty()) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) { PartsLine(song.path, song.parts) }
+          }
         }
       } else if (song.unreadable) {
         Text("Couldn't read this file", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
