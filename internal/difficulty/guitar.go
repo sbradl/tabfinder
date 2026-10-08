@@ -2,6 +2,7 @@ package difficulty
 
 import (
 	"math"
+	"math/bits"
 
 	"tabfinder/internal/score"
 )
@@ -38,31 +39,31 @@ func reach(lo, hi int) float64 { return math.Exp2(-float64(lo)/12) - math.Exp2(-
 
 // grip is fretted notes the hand holds or plays without moving.
 type grip struct {
-	lo, hi   int          // frets
-	strings  map[int]bool // the strings
-	nStrings int          // of the guitar
+	lo, hi   int    // frets
+	strings  uint32 // the strings, bit n for string n
+	nStrings int    // of the guitar
 }
 
 func (g *grip) add(n score.Note) {
-	if g.strings == nil {
-		g.lo, g.hi, g.strings = n.Fret, n.Fret, map[int]bool{}
+	if n.String < 0 || n.String > 31 {
+		return
+	}
+	if g.strings == 0 {
+		g.lo, g.hi = n.Fret, n.Fret
 	}
 	g.lo, g.hi = min(g.lo, n.Fret), max(g.hi, n.Fret)
-	g.strings[n.String] = true
+	g.strings |= 1 << n.String
 }
 
 // strain is how far the hand reaches for a grip, as a share of the scale length: the reach
 // along the neck, made longer by strings skipped (the fingers spread across too) and by
 // the low strings (the hand has to wrap further around the neck), up to a tenth on the lowest.
 func (g *grip) strain() float64 {
-	if g.strings == nil {
+	if g.strings == 0 {
 		return 0
 	}
-	low, high := 1000, -1
-	for s := range g.strings {
-		low, high = min(low, s), max(high, s)
-	}
-	skipped := high - low + 1 - len(g.strings)
+	low, high := bits.TrailingZeros32(g.strings), 31-bits.LeadingZeros32(g.strings)
+	skipped := high - low + 1 - bits.OnesCount32(g.strings)
 	lowness := 0.0
 	if g.nStrings > 1 {
 		lowness = 1 - float64(low)/float64(g.nStrings-1)
@@ -72,60 +73,55 @@ func (g *grip) strain() float64 {
 
 // stretched reports whether a grip is a stretch: four frets or more (one finger per fret
 // spans three) and a strain of a stretch.
-func (g *grip) stretched() bool { return g != nil && g.hi-g.lo >= 4 && g.strain() >= stretchReach }
+func (g *grip) stretched() bool {
+	return g.strings != 0 && g.hi-g.lo >= 4 && g.strain() >= stretchReach
+}
 
 // fretted reports whether a note needs a finger: struck, not open.
 func fretted(n score.Note) bool { return !n.Tie && !n.Dead && n.Fret > 0 }
 
-// grips is what a bar's fretting hand holds: each chord, and the notes on different strings
-// within a quarter note, where the hand has no time to move.
-func grips(b bar) []*grip {
-	var out []*grip
-	for _, beat := range b.beats {
-		chord := &grip{nStrings: len(b.info.Pitches)}
-		for _, n := range beat.Notes {
-			if fretted(n) {
-				chord.add(n)
-			}
-		}
-		if chord.strings != nil {
-			out = append(out, chord)
-		}
-	}
-	for _, g := range quarterGrips(b) {
-		out = append(out, g)
-	}
-	return out
-}
-
 // quarterGrips is the grips of fretted notes on different strings within each quarter note
-// of a bar, by quarter.
-func quarterGrips(b bar) map[int]*grip {
-	quarters := map[int]*grip{}
+// of a bar, where the hand has no time to move, by quarter; empty for a quarter of notes
+// on one string or none.
+func quarterGrips(b bar) []grip {
+	n := 0
 	for _, beat := range b.beats {
-		for _, n := range beat.Notes {
-			if !fretted(n) {
-				continue
+		n = max(n, beat.Start/score.Quarter+1)
+	}
+	quarters := make([]grip, n)
+	for _, beat := range b.beats {
+		for _, note := range beat.Notes {
+			if fretted(note) {
+				g := &quarters[beat.Start/score.Quarter]
+				g.nStrings = len(b.info.Pitches)
+				g.add(note)
 			}
-			k := beat.Start / score.Quarter
-			if quarters[k] == nil {
-				quarters[k] = &grip{nStrings: len(b.info.Pitches)}
-			}
-			quarters[k].add(n)
 		}
 	}
-	for k, g := range quarters {
-		if len(g.strings) < 2 {
-			delete(quarters, k)
+	for i := range quarters {
+		if bits.OnesCount32(quarters[i].strings) < 2 {
+			quarters[i] = grip{}
 		}
 	}
 	return quarters
 }
 
-// stretches reports whether a bar asks for a stretch of the fretting hand.
-func stretches(b bar) bool {
-	for _, g := range grips(b) {
-		if g.stretched() {
+// stretches reports whether a bar asks for a stretch of the fretting hand: in a chord, or
+// in a quarter note's grip.
+func stretches(b bar, quarters []grip) bool {
+	for _, beat := range b.beats {
+		chord := grip{nStrings: len(b.info.Pitches)}
+		for _, n := range beat.Notes {
+			if fretted(n) {
+				chord.add(n)
+			}
+		}
+		if chord.stretched() {
+			return true
+		}
+	}
+	for i := range quarters {
+		if quarters[i].stretched() {
 			return true
 		}
 	}

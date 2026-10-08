@@ -43,11 +43,12 @@ func newBar(sc *score.Score, info TrackInfo, track, index int, poly bool) bar {
 			b.fx |= beat.AllFx()
 		}
 	}
-	b.grips = gripsPerSecond(b) // TODO: drums have no fretting hand; it counts their notes
+	quarters := quarterGrips(b)
+	b.grips = gripsPerSecond(b, quarters) // TODO: drums have no fretting hand; it counts their notes
 	if b.drums {
 		b.doubleKick, b.blast = doubleKick(b), blastBeat(b)
 	} else {
-		b.stretched, b.chord, b.sweep = stretches(b), hasChord(b), sweeps(b)
+		b.stretched, b.chord, b.sweep = stretches(b, quarters), hasChord(b), sweeps(b)
 	}
 	return b
 }
