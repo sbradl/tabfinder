@@ -452,6 +452,11 @@ func TestTagChordsAndStretches(t *testing.T) {
 		{"stretched chord", every(q, stretchy...), true, true},
 		{"power chords moving", []score.Beat{{Start: 0, Dur: 2 * q, Notes: e5}, {Start: 2 * q, Dur: 2 * q, Notes: a5}}, false, false},
 		{"stretched lick", lick, false, true},
+		// One finger per fret spans three; frets get narrower up the neck.
+		{"four frets low on the neck", every(q, shape(-1, 1, -1, 5, -1, -1)...), false, true},
+		{"four frets at the 3rd", every(q, shape(3, -1, -1, 7, -1, -1)...), false, true},
+		{"three frets", every(q, shape(3, -1, -1, 6, -1, -1)...), false, false},
+		{"five frets at the 12th", every(q, shape(-1, -1, -1, 12, -1, 17)...), false, false},
 		{"shift along a string", slide, false, false},
 	}
 	for _, tt := range tests {

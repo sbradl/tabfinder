@@ -6,6 +6,7 @@ package difficulty
 import (
 	"fmt"
 	"maps"
+	"math"
 	"math/bits"
 	"regexp"
 	"slices"
@@ -389,9 +390,16 @@ func hasChord(b bar) bool {
 	return false
 }
 
-// stretchFrets is the fret span that takes a stretch of the hand: five, index finger on
-// the 5th fret, little finger on the 10th.
-const stretchFrets = 5
+// stretchReach is the reach that takes a stretch of the hand, as a share of the scale
+// length: four frets at the 7th, from the 7th to the 11th. One finger per fret spans three.
+// Frets get narrower up the neck, so the same number of frets is a smaller reach there:
+// four frets low on the neck are a stretch, five at the 12th are not.
+var stretchReach = math.Exp2(-7.0/12) - math.Exp2(-11.0/12) - 1e-9
+
+// stretched reports whether reaching from one fret to another is a stretch.
+func stretched(lo, hi int) bool {
+	return math.Exp2(-float64(lo)/12)-math.Exp2(-float64(hi)/12) >= stretchReach
+}
 
 // stretches reports whether a bar asks for a stretch: frets that far apart in a chord, or
 // on different strings within a quarter note, where the hand has no time to move.
@@ -421,12 +429,12 @@ func stretches(b bar) bool {
 			}
 			add(quarters[k], n)
 		}
-		if chord.hi-chord.lo >= stretchFrets {
+		if chord.strings != nil && stretched(chord.lo, chord.hi) {
 			return true
 		}
 	}
 	for _, f := range quarters {
-		if len(f.strings) >= 2 && f.hi-f.lo >= stretchFrets {
+		if len(f.strings) >= 2 && stretched(f.lo, f.hi) {
 			return true
 		}
 	}
