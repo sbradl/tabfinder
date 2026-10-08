@@ -22,11 +22,12 @@ func writeIndexText(t *testing.T, text string) string {
 }
 
 func TestLoadIndexOfAnotherVersion(t *testing.T) {
-	// An index from before songs had parts, or of another version, is as good as none:
-	// the app scans the folder again.
+	// An index from before songs had parts, with parts rated the old way, or of another
+	// version, is as good as none: the app scans the folder again.
 	for _, text := range []string{
 		"{\"path\":\"a\"}\n{\"path\":\"b\"}\n",
 		"{\"tabfinderIndex\":1}\n{\"path\":\"a\"}\n",
+		"{\"tabfinderIndex\":2}\n{\"path\":\"a\"}\n",
 		"{\"tabfinderIndex\":99}\n{\"path\":\"a\"}\n",
 	} {
 		p := filepath.Join(t.TempDir(), "index.jsonl")
@@ -44,7 +45,7 @@ func TestScanIndexWritesItsVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(index)
-	if first, _, _ := strings.Cut(string(b), "\n"); first != `{"tabfinderIndex":2}` {
+	if first, _, _ := strings.Cut(string(b), "\n"); first != `{"tabfinderIndex":3}` {
 		t.Errorf("first line %q", first)
 	}
 	if songs, err := LoadIndex(index); err != nil || len(songs) != 1 || songs[0].Title != "Tin Owl" {
