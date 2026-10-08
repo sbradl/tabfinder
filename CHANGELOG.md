@@ -5,6 +5,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Difficulty per part: the notes of Guitar Pro 3–7 files are read and each song is split
+  into drums, bass, rhythm and lead guitar, each with a level from 1 to 10 and tags such
+  as `fast`, `syncopated`, `odd meter`, `polyrhythm`, `stretches` or `double kick`.
+- `tabscan`: `-drums`, `-bass`, `-rhythm` and `-lead` filter by a range of levels, `-tag`
+  by tags, `-sort easiest|hardest` orders by difficulty. TSV has two more columns,
+  `difficulty` and `tags`; JSON has the parts.
+
+### Changed
+
+- The saved scan (index) starts with its version. An index of an older version is
+  scanned again, once, so songs get their parts.
+- A scan reads all notes now and takes longer: about 0.8 s instead of 0.2 s for a
+  library of 950 songs on a desktop.
+
 ## [1.0.1] - 2026-10-07
 
 ### Fixed
