@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"tabfinder/internal/difficulty"
 	"tabfinder/internal/tab"
 	"tabfinder/internal/tabfiles"
 	"tabfinder/internal/testlib"
@@ -32,6 +33,10 @@ func TestTSVWriter(t *testing.T) {
 			{Name: "Voice"}, // no instrument at all
 			{Name: "Keys", Instrument: "Piano\tx"},
 		},
+		Parts: []difficulty.Part{
+			{Role: difficulty.Drums, Score: 2.6},
+			{Role: difficulty.Rhythm, Score: 7.5, Tags: []string{"fast", "triplets"}},
+		},
 	})
 	emit(&tab.Song{Path: "x.gp3"}) // nothing known
 	w.Flush()
@@ -43,15 +48,16 @@ func TestTSVWriter(t *testing.T) {
 		"A/B/c.gp5", "Art ist", "Al bum", "Ti  tle", "120, 90.5",
 		"Lead [Distortion Guitar]; Bass; Drums; Voice; Keys [Piano x]",
 		"Drop C (C G C F A D); E Standard (E A D G); -; -; -",
+		"drums 3, rhythm 8", "rhythm: fast, triplets",
 	}, "\t")
 	if lines[0] != want {
 		t.Errorf("row =\n%q\nwant\n%q", lines[0], want)
 	}
-	if lines[1] != "x.gp3\t\t\t\t\t\t" {
+	if lines[1] != "x.gp3\t\t\t\t\t\t\t\t" {
 		t.Errorf("empty row = %q", lines[1])
 	}
 	for _, l := range lines {
-		if n := strings.Count(l, "\t"); n != 6 {
+		if n := strings.Count(l, "\t"); n != 8 {
 			t.Errorf("%d tabs in %q", n, l)
 		}
 	}
@@ -100,7 +106,7 @@ func TestCLIGolden(t *testing.T) {
 			t.Errorf("stderr = %q", errOut)
 		}
 		testlib.Golden(t, "tree.tsv", []byte(out))
-		if !strings.HasPrefix(out, "path\tartist\talbum\ttitle\ttempo\tinstruments\ttunings\n") {
+		if !strings.HasPrefix(out, "path\tartist\talbum\ttitle\ttempo\tinstruments\ttunings\tdifficulty\ttags\n") {
 			t.Errorf("header = %q", strings.SplitN(out, "\n", 2)[0])
 		}
 	})
@@ -281,7 +287,7 @@ func TestCLIDefaultsToCurrentDirectory(t *testing.T) {
 	}
 	// An empty directory prints just the header.
 	out, _, code = run(t, t.TempDir(), "")
-	if code != 0 || out != "path\tartist\talbum\ttitle\ttempo\tinstruments\ttunings\n" {
+	if code != 0 || out != "path\tartist\talbum\ttitle\ttempo\tinstruments\ttunings\tdifficulty\ttags\n" {
 		t.Errorf("empty dir: exit %d, stdout %q", code, out)
 	}
 }
