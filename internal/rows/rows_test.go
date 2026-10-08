@@ -2,9 +2,11 @@ package rows
 
 import (
 	"fmt"
+	"reflect"
 	"slices"
 	"testing"
 
+	"tabfinder/internal/difficulty"
 	"tabfinder/internal/finder"
 	"tabfinder/internal/tab"
 	"tabfinder/internal/testlib"
@@ -118,5 +120,41 @@ func TestTexts(t *testing.T) {
 	songs := []*tab.Song{{}, {Error: "x"}, {Error: "y"}}
 	if got := ScanSummary(songs); got != "3 tabs, 2 unreadable" {
 		t.Errorf("summary = %q", got)
+	}
+}
+
+func TestParts(t *testing.T) {
+	r := Of(finder.Entry{Song: &tab.Song{Parts: []difficulty.Part{
+		{Role: difficulty.Drums, Score: 2.4},
+		{Role: difficulty.Rhythm, Score: 6.5, Tags: []string{"chords", "odd meter"}},
+		{Role: difficulty.Lead, Score: 9.96, Tracks: []int{1, 2}},
+	}}})
+	want := []Part{
+		{Role: "drums", Level: 2, Tags: []string{}},
+		{Role: "rhythm", Level: 7, Tags: []string{"chords", "odd meter"}},
+		{Role: "lead", Level: 10, Tags: []string{}},
+	}
+	if !reflect.DeepEqual(r.Parts, want) {
+		t.Errorf("parts = %+v, want %+v", r.Parts, want)
+	}
+	if r := Of(finder.Entry{Song: &tab.Song{}}); r.Parts == nil || len(r.Parts) != 0 {
+		t.Errorf("no parts: %#v, want empty, not nil (JSON [])", r.Parts)
+	}
+	// The shared fixture has songs with parts.
+	for _, r := range All(finder.New(testlib.Songs())) {
+		if r.Title == "Brass Kettle" && len(r.Parts) != 4 {
+			t.Errorf("Brass Kettle: parts = %+v, want all four", r.Parts)
+		}
+	}
+}
+
+func TestLevelChip(t *testing.T) {
+	for _, tt := range []struct {
+		lo, hi int
+		want   string
+	}{{1, 3, "1–3"}, {7, 10, "7–10"}, {5, 5, "5"}, {1, 10, "1–10"}} {
+		if got := LevelChip(tt.lo, tt.hi); got != tt.want {
+			t.Errorf("LevelChip(%d, %d) = %q, want %q", tt.lo, tt.hi, got, tt.want)
+		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"tabfinder/internal/difficulty"
 	"tabfinder/internal/finder"
 	"tabfinder/internal/tab"
 	"tabfinder/internal/tuxguitar"
@@ -54,6 +55,30 @@ type Song struct {
 	TempoDetail string   `json:"tempoDetail"` // under it: "BPM", or the tempo changes that follow
 	Unreadable  bool     `json:"unreadable"`  // parsing failed and there's nothing to show
 	OpenAs      string   `json:"openAs"`      // the file name to hand TuxGuitar a copy under
+	Parts       []Part   `json:"parts"`       // drums, bass, rhythm, lead: those played
+}
+
+// Part is how hard a role's part is: a meter and a number on the row.
+type Part struct {
+	Role  string   `json:"role"`  // drums, bass, rhythm, lead
+	Level int      `json:"level"` // 1 to 10
+	Tags  []string `json:"tags"`
+}
+
+func partsOf(ps []difficulty.Part) []Part {
+	out := make([]Part, len(ps))
+	for i, p := range ps {
+		out[i] = Part{Role: string(p.Role), Level: p.Level(), Tags: append([]string{}, p.Tags...)}
+	}
+	return out
+}
+
+// LevelChip is a range of levels as the summary of the filters shows it: "1–3", or "5".
+func LevelChip(lo, hi int) string {
+	if lo == hi {
+		return strconv.Itoa(lo)
+	}
+	return fmt.Sprintf("%d–%d", lo, hi)
 }
 
 func Of(e finder.Entry) Song {
@@ -65,6 +90,7 @@ func Of(e finder.Entry) Song {
 		BPMs:       []string{},
 		Unreadable: s.Unreadable(),
 		OpenAs:     tuxguitar.FileName(s),
+		Parts:      partsOf(s.Parts),
 	}
 	for _, bpm := range s.DistinctBPMs() {
 		r.BPMs = append(r.BPMs, strconv.FormatFloat(bpm, 'f', -1, 64))
