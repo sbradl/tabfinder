@@ -22,7 +22,6 @@ type bar struct {
 	syncopated, stretched, chord, sweep, ghost bool
 	doubleKick, blast                          bool
 	triplets, oddTuplets                       bool
-	beatsStruck, unevenBeats                   int // beats of two strikes or more, and of those uneven
 }
 
 func newBar(sc *score.Score, info TrackInfo, track, index int, poly bool) bar {
@@ -37,7 +36,6 @@ func newBar(sc *score.Score, info TrackInfo, track, index int, poly bool) bar {
 	b.rate, b.picks, b.onsets = rate(b), picksPerSecond(b), onsets(b)
 	b.syncopated, b.ghost = syncopated(b, b.drums), hasGhost(b)
 	b.triplets, b.oddTuplets = hasTuplet(b.beats, isTriplet), hasTuplet(b.beats, isOddTuplet)
-	b.beatsStruck, b.unevenBeats = unevenBeats(b)
 	for _, beat := range b.beats {
 		if beat.Struck() {
 			b.fx |= beat.AllFx()

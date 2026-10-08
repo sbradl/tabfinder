@@ -17,8 +17,8 @@ import (
 
 // IndexHeader is the first line of an index of this version. An index of another version
 // is ignored, so that a new version of the apps scans again for what it knows of songs
-// (version 2: the parts of a song and how hard they are).
-const IndexHeader = `{"tabfinderIndex":2}`
+// (version 2: the parts of a song and how hard they are; 3: rated anew).
+const IndexHeader = `{"tabfinderIndex":3}`
 
 // LoadIndex reads an index; a missing one, or one of another version, is none and no error.
 func LoadIndex(path string) ([]*tab.Song, error) {

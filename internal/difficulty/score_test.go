@@ -150,10 +150,10 @@ func TestScoreMaterial(t *testing.T) {
 }
 
 func TestScorePickingStamina(t *testing.T) {
-	riff := every(e, powerChord...) // eighths at 200: 6.7 a second
-	short := scoreOf(t, track(30, riff).Bars, 200, rhythmGuitar, difficulty.Rhythm)
-	long := scoreOf(t, track(120, riff).Bars, 200, rhythmGuitar, difficulty.Rhythm)
-	harder(t, "a minute of fast picking, four minutes", short, long)
+	riff := every(s, powerChord...) // sixteenths at 200: 13.3 a second
+	short := scoreOf(t, track(50, riff).Bars, 200, rhythmGuitar, difficulty.Rhythm)
+	long := scoreOf(t, track(200, riff).Bars, 200, rhythmGuitar, difficulty.Rhythm)
+	harder(t, "a minute of very fast picking, four minutes", short, long)
 
 	// Two fast bars in twenty: a burst, not what the song asks all through.
 	slow, fast := every(q, powerChord...), every(s, powerChord...)
@@ -166,36 +166,30 @@ func TestScorePickingStamina(t *testing.T) {
 	}
 }
 
-func TestScorePickingLimit(t *testing.T) {
-	// Picking gets hard all at once near a limit: ten BPM more change little far below it and
-	// a lot around it. Each song is four minutes of sixteenths.
+func TestScorePickingLimits(t *testing.T) {
+	// Each song is four minutes of sixteenth power chords.
 	at := func(bpm int) float64 {
 		return scoreOf(t, track(bpm, every(s, powerChord...)).Bars, float64(bpm), rhythmGuitar, difficulty.Rhythm)
 	}
-	below, around := at(65)-at(55), at(95)-at(85)
-	if around < 3*below || around < 2 {
-		t.Errorf("ten BPM more: %.1f far below the limit (55 to 65), %.1f around it (85 to 95); want at least 2 and three times as much",
+	// Picking starts to count around eighths at 160 (sixteenths at 80): ten BPM more change
+	// little far below that and more around it.
+	below, around := at(65)-at(55), at(85)-at(75)
+	if around < 3*below || around < 0.5 {
+		t.Errorf("ten BPM more: %.1f far below (55 to 65), %.1f around eighths at 160 (75 to 85); want at least 0.5 and three times as much",
 			below, around)
 	}
-	// Past the limit, who can pick that fast can mostly pick faster too.
-	if above := at(180) - at(130); above >= 1 {
-		t.Errorf("fifty BPM more past the limit (130 to 180): %.1f, want less than 1", above)
+	// Fast picking alone is what a metal rhythm player learns: an intermediate level.
+	if mid := at(135); mid > 7 {
+		t.Errorf("sixteenths at 135 (9 a second): score %.1f, want 7 at most", mid)
 	}
-}
-
-func TestScoreGallops(t *testing.T) {
-	// Four minutes at 150 of power chords: plain sixteenths, or gallops (an eighth, two
-	// sixteenths) with fewer notes but a change of motion in every beat.
-	var gallop []score.Beat
-	for k := range 4 {
-		gallop = append(gallop, at(k*q, k*q+e, k*q+e+s)...)
+	// Between the two limits, faster changes little.
+	if between := at(180) - at(130); between >= 1 {
+		t.Errorf("fifty BPM more between the limits (130 to 180): %.1f, want less than 1", between)
 	}
-	for i := range gallop {
-		gallop[i].Dur = min(gallop[i].Dur, e) // at() holds the last chord to the bar's end
+	// Minutes of 13 strikes a second or more (sixteenths at 195) are what few can play.
+	if extreme := at(200) - at(160); extreme < 2 {
+		t.Errorf("sixteenths at 200 against 160: %.1f harder, want 2 at least", extreme)
 	}
-	plain := scoreOf(t, track(150, every(s, powerChord...)).Bars, 150, rhythmGuitar, difficulty.Rhythm)
-	galloping := scoreOf(t, track(150, gallop).Bars, 150, rhythmGuitar, difficulty.Rhythm)
-	harder(t, "plain sixteenths, gallops", plain, galloping)
 }
 
 func TestScoreTellsHardSongsApart(t *testing.T) {
@@ -224,7 +218,7 @@ func TestScoreRisesWithSpeed(t *testing.T) {
 			t.Errorf("sixteenth power chords at 60, 100, 140, 180 BPM: scores %v, want none lower than the one before", scores)
 		}
 	}
-	if scores[len(scores)-1]-scores[0] < 5 {
-		t.Errorf("sixteenth power chords at 60 and 180 BPM: scores %v, want 5 apart at least", scores)
+	if scores[len(scores)-1]-scores[0] < 4 {
+		t.Errorf("sixteenth power chords at 60 and 180 BPM: scores %v, want 4 apart at least", scores)
 	}
 }

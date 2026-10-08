@@ -127,10 +127,14 @@ it hard: `fast`, `endurance`, `syncopated`, `triplets`, `tuplets`, `polyrhythm`,
 `tremolo picking`, `slap`, `ghost notes`, `double kick`, `blast beats`, `repetitive` and
 `many parts`. TuxGuitar and Power Tab files aren't rated.
 
-The level weighs what the part asks of the picking hand (how fast, and for how long) and
-of the fretting hand (how often it moves, stretches counting double), plus its rhythm and
-how much there is to learn. It was fitted to one band's ranking of songs they know, so
-treat it as a guide.
+The level weighs what the part asks of the picking hand and of the fretting hand (how
+often it moves, stretches counting double), plus its rhythm and how much there is to
+learn. Fast picking counts a little from eighths at about 160 BPM on; what makes a part
+really hard is minutes of very fast picking, from about 13 notes a second (sixteenths at
+195 BPM). Levels 1–3 are for beginners, 4–6 intermediate, 7–8 advanced and 9–10 expert.
+The scale was fitted to how one intermediate metal guitarist rates the rhythm guitar of
+songs they know, so treat it as a guide. Tabs don't say how a part is picked, so
+downpicked riffs come out easier than they are.
 
 `-drums`, `-bass`, `-rhythm` and `-lead` take a range of levels like `-bpm`: `-rhythm 3-5`,
 `-drums -3`. A range only matches songs that have that part. `-tag rhythm:triplets`
