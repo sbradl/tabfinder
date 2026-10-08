@@ -461,6 +461,10 @@ is drawn above the list).
 - [x] E-DSK-33 Sort menu in the top bar: A–Z, easiest first, hardest first (songs
   without parts last); the button shows the order; a click beside the open menu
   closes it and changes nothing.
+- [x] E-DSK-34 A row shows per part its instrument, a meter of five rising bars
+  (two levels each, half a bar for an odd level) colored green for 1 to red for
+  10, and the level; right of the tuning tags, or below them when both don't fit
+  (360 dp); a song without parts shows none.
 
 ### Android app (device tests, `android/app/src/androidTest`)
 
