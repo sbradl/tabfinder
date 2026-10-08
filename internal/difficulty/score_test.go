@@ -72,6 +72,15 @@ func TestScorePickingHand(t *testing.T) {
 	harder(t, "hammer-ons and pull-offs, the same picked", scoreBar(line(score.Legato, notes...)), scoreBar(line(0, notes...)))
 }
 
+func TestScoreStretches(t *testing.T) {
+	scoreBar := func(bar []score.Beat) float64 {
+		return scoreOf(t, track(16, bar).Bars, 120, rhythmGuitar, difficulty.Rhythm)
+	}
+	easy := line(0, [2]int{0, 3}, [2]int{1, 5}) // on the low strings, as fast, as many changes
+	wide := line(0, [2]int{0, 3}, [2]int{1, 7})
+	harder(t, "a riff in one position, the same with a stretch", scoreBar(easy), scoreBar(wide))
+}
+
 func TestScoreRisesWithSpeed(t *testing.T) {
 	riff := track(16, every(s, powerChord...)).Bars
 	var scores []float64

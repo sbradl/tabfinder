@@ -7,10 +7,28 @@ import (
 	"tabfinder/internal/score"
 )
 
-// rating is how hard a part is on a scale of 1 to 10, rounded to a tenth.
+// rating is how hard a part is on a scale of 1 to 10, rounded to a tenth: mostly how fast
+// it is, plus what else it asks for.
 func rating(r Role, bars []bar) float64 {
-	hard := speed(bars)
+	hard := speed(bars) + 0.3*stretchiness(r, bars)
 	return math.Round((1+9*clamp(hard))*10) / 10
+}
+
+// stretchiness is how much a part stretches the fretting hand, from 0 to 1 for a stretch in
+// half the bars or more. Drums have none.
+func stretchiness(r Role, bars []bar) float64 {
+	if r == Drums {
+		return 0
+	}
+	return scale(share(bars, stretches), 0, 0.5)
+}
+
+// share is the share of bars with something.
+func share(bars []bar, has func(bar) bool) float64 {
+	if len(bars) == 0 {
+		return 0
+	}
+	return float64(count(bars, has)) / float64(len(bars))
 }
 
 // speed is how fast a part is for either hand, from 0 to 1: what each keeps up for a while,
