@@ -92,6 +92,9 @@ class MainScreenTest {
 
   private fun waitForCounter(want: String) = until { counter() == want }
 
+  /** The songs in the saved scan: its lines after the version line. */
+  private fun savedSongs() = File(data, "index.jsonl").readLines().drop(1).count { it.isNotBlank() }
+
   private fun shown(tag: String) = compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
 
   private fun type(field: String, text: String) = compose.onNodeWithTag("field-$field").performTextInput(text)
@@ -123,7 +126,7 @@ class MainScreenTest {
       .assert(hasText("Amber Marsh · Tide of Lanterns"))
       .assert(hasText("120"))
       .assert(hasText("BPM"))
-    assertEquals(total, File(data, "index.jsonl").readLines().count { it.isNotBlank() })
+    assertEquals(total, savedSongs())
   }
 
   // E-AND-04 (the matching itself: cmd/tabscan TestServeAppFilters)
@@ -261,6 +264,6 @@ class MainScreenTest {
     vm.setRoot(other.path)
     waitForCounter("1 / 1")
     assertTrue(shown("song-Other Band/Other Album/Other Song.gp3"))
-    assertEquals(1, File(data, "index.jsonl").readLines().count { it.isNotBlank() })
+    assertEquals(1, savedSongs())
   }
 }
