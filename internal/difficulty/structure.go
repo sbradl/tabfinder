@@ -1,10 +1,9 @@
 package difficulty
 
 import (
-	"fmt"
 	"math/bits"
 	"slices"
-	"strings"
+	"strconv"
 
 	"tabfinder/internal/score"
 )
@@ -47,8 +46,14 @@ func material(bars []bar, plays []int) (distinct, played int) {
 // groove for the first half of the bar.
 func differentBars(bars []bar) int {
 	var kinds [][]onset
+	seen := map[string]bool{} // bars exactly like one before: no need to compare them
 	for _, b := range bars {
-		o := onsets(b)
+		o := b.onsets
+		key := onsetsKey(o)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
 		same := func(k []onset) bool { return alike(k, o) }
 		if b.info.Drums {
 			half := b.ticks() / 2
@@ -59,6 +64,18 @@ func differentBars(bars []bar) int {
 		}
 	}
 	return len(kinds)
+}
+
+// onsetsKey is the onsets of a bar as text, the same for the same onsets.
+func onsetsKey(os []onset) string {
+	var b []byte
+	for _, o := range os {
+		b = strconv.AppendInt(b, int64(o.start), 10)
+		b = append(b, ':')
+		b = append(b, o.notes...)
+		b = append(b, '|')
+	}
+	return string(b)
 }
 
 // onset is notes struck together: when, and what relative to the bar's first note
@@ -79,15 +96,16 @@ func onsets(b bar) []onset {
 		if ref < 0 && !b.info.Drums {
 			ref = ps[0]
 		}
-		var sb strings.Builder
+		var notes []byte
 		for _, p := range ps {
-			fmt.Fprintf(&sb, "%d ", p-max(ref, 0))
+			notes = strconv.AppendInt(notes, int64(p-max(ref, 0)), 10)
+			notes = append(notes, ' ')
 		}
 		if len(out) > 0 && out[len(out)-1].start == beat.Start { // another voice
-			out[len(out)-1].notes += sb.String()
+			out[len(out)-1].notes += string(notes)
 			continue
 		}
-		out = append(out, onset{beat.Start, sb.String()})
+		out = append(out, onset{beat.Start, string(notes)})
 	}
 	return out
 }

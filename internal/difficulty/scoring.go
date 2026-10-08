@@ -8,11 +8,10 @@ import (
 )
 
 // rating is how hard a part is on a scale of 1 to 10, rounded to a tenth: mostly what it
-// asks of either hand, plus its rhythm and how much there is to learn. plays is how often
-// each bar of the song is played.
-func rating(r Role, bars []bar, plays []int) float64 {
-	hands := either(pickingHand(bars, plays), frettingHand(bars))
-	hard := hands + 0.15*rhythmic(r, bars) + 0.15*learning(bars, plays)
+// asks of either hand, plus its rhythm and how much there is to learn.
+func rating(p *part) float64 {
+	hands := either(pickingHand(p.bars, p.plays), frettingHand(p.bars))
+	hard := hands + 0.15*rhythmic(p.bars) + 0.15*learning(p)
 	return math.Round((1+9*soften(hard))*10) / 10
 }
 
@@ -34,7 +33,7 @@ func soften(hard float64) float64 {
 // Fast uneven picking, like gallops (an eighth and two sixteenths), is harder than an even
 // stream of notes: the motion changes in every beat.
 func pickingHand(bars []bar, plays []int) float64 {
-	pace := 1 / (1 + math.Exp(-pickSteepness*(percentile(bars, 0.75, picksPerSecond)-fastPickRate)))
+	pace := 1 / (1 + math.Exp(-pickSteepness*(percentile(bars, 0.75, func(b *bar) float64 { return b.picks })-fastPickRate)))
 	stamina := scale(fastPicking(bars, plays), 0, 300)
 	return 0.5*pace + 0.5*stamina + 0.2*pace*uneven(bars)
 }
@@ -43,21 +42,29 @@ func pickingHand(bars []bar, plays []int) float64 {
 // evenly spaced: strikes of different lengths, or off the beat.
 func uneven(bars []bar) float64 {
 	beats, odd := 0, 0
-	for _, b := range bars {
-		for _, starts := range strikesByBeat(b) {
-			if len(starts) < 2 {
-				continue
-			}
-			beats++
-			if !evenlySpaced(starts) {
-				odd++
-			}
-		}
+	for i := range bars {
+		beats += bars[i].beatsStruck
+		odd += bars[i].unevenBeats
 	}
 	if beats == 0 {
 		return 0
 	}
 	return float64(odd) / float64(beats)
+}
+
+// unevenBeats is the number of a bar's beats with two strikes or more, and how many of
+// those are uneven.
+func unevenBeats(b bar) (struck, uneven int) {
+	for _, starts := range strikesByBeat(b) {
+		if len(starts) < 2 {
+			continue
+		}
+		struck++
+		if !evenlySpaced(starts) {
+			uneven++
+		}
+	}
+	return struck, uneven
 }
 
 // strikesByBeat is when notes are struck in a bar, by quarter note.
@@ -97,8 +104,8 @@ const pickSteepness = 3
 // fastPicking is how long a part picks fast, in seconds, repeats included.
 func fastPicking(bars []bar, plays []int) float64 {
 	total := 0.0
-	for _, b := range bars {
-		if picksPerSecond(b) >= fastPickRate {
+	for i := range bars {
+		if b := &bars[i]; b.picks >= fastPickRate {
 			total += b.seconds() * float64(timesOf(b, plays))
 		}
 	}
@@ -106,7 +113,7 @@ func fastPicking(bars []bar, plays []int) float64 {
 }
 
 // timesOf is how often a bar is played.
-func timesOf(b bar, plays []int) int {
+func timesOf(b *bar, plays []int) int {
 	if b.index < len(plays) {
 		return plays[b.index]
 	}
@@ -117,33 +124,22 @@ func timesOf(b bar, plays []int) int {
 // second, a stretch counting double: what it keeps up for a while, the 90th percentile of
 // its bars. A stretch held over many strokes costs once; stretch after stretch, each time.
 func frettingHand(bars []bar) float64 {
-	return scale(percentile(bars, 0.9, gripsPerSecond), 1, 10)
+	return scale(percentile(bars, 0.9, func(b *bar) float64 { return b.grips }), 1, 10)
 }
 
 // learning is how much there is to learn of a part, from 0 for up to 8 different bars to 1
 // for 40 or more.
-func learning(bars []bar, plays []int) float64 {
-	distinct, _ := material(bars, plays)
-	return scale(float64(distinct), 8, 40)
-}
+func learning(p *part) float64 { return scale(float64(p.distinct), 8, 40) }
 
 // rhythmic is how tricky a part's rhythm is, from 0 to 1: odd meters, meter changes,
 // syncopation, polyrhythm and tuplets other than triplets.
-func rhythmic(r Role, bars []bar) float64 {
-	odd := scale(share(bars, func(b bar) bool { return oddMeter(b.head) }), 0, 0.5)
+func rhythmic(bars []bar) float64 {
+	odd := scale(share(bars, func(b *bar) bool { return oddMeter(b.head) }), 0, 0.5)
 	changes := scale(float64(meterChanges(bars)), 0, 16)
-	synco := scale(share(bars, func(b bar) bool { return syncopated(b, r == Drums) }), 0, 0.75)
-	poly := scale(float64(count(bars, func(b bar) bool { return b.poly })), 0, 8)
-	tuplets := scale(share(bars, func(b bar) bool { return hasTuplet(b.beats, isOddTuplet) }), 0, 0.25)
+	synco := scale(share(bars, func(b *bar) bool { return b.syncopated }), 0, 0.75)
+	poly := scale(float64(count(bars, func(b *bar) bool { return b.poly })), 0, 8)
+	tuplets := scale(share(bars, func(b *bar) bool { return b.oddTuplets }), 0, 0.25)
 	return clamp(0.4*odd + 0.4*changes + 0.4*synco + 0.5*poly + 0.3*tuplets)
-}
-
-// share is the share of bars with something.
-func share(bars []bar, has func(bar) bool) float64 {
-	if len(bars) == 0 {
-		return 0
-	}
-	return float64(count(bars, has)) / float64(len(bars))
 }
 
 // picksPerSecond is how often the picking hand strikes in a bar: notes struck together
@@ -212,13 +208,13 @@ func gripsPerSecond(b bar) float64 {
 func either(a, b float64) float64 { return 1 - (1-a)*(1-b) }
 
 // percentile is the p-th percentile of a measure of bars.
-func percentile(bars []bar, p float64, measure func(bar) float64) float64 {
+func percentile(bars []bar, p float64, measure func(*bar) float64) float64 {
 	if len(bars) == 0 {
 		return 0
 	}
 	vs := make([]float64, len(bars))
-	for i, b := range bars {
-		vs[i] = measure(b)
+	for i := range bars {
+		vs[i] = measure(&bars[i])
 	}
 	slices.Sort(vs)
 	return vs[min(int(p*float64(len(vs))), len(vs)-1)]
