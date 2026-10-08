@@ -666,6 +666,32 @@ func TestTagPolyrhythm(t *testing.T) {
 	}
 }
 
+func TestTagEndurance(t *testing.T) {
+	fast, slow := every(s, powerChord...), every(q, powerChord...)
+	alternate := func(n, run int) [][]score.Beat { // runs of fast bars, then a slow bar
+		var out [][]score.Beat
+		for i := range n {
+			out = append(out, [][]score.Beat{fast, slow}[min(i%(run+1)/run, 1)])
+		}
+		return out
+	}
+	tests := []struct {
+		name string
+		bars [][]score.Beat
+		want bool
+	}{
+		{"32 fast bars in a row (48 s)", track(32, fast).Bars, true},
+		{"fast in runs of 8 bars (12 s)", alternate(45, 8), false},
+		{"16 fast bars (24 s), then slow", append(track(16, fast).Bars, track(16, slow).Bars...), false},
+	}
+	for _, tt := range tests {
+		sc := &score.Score{Bars: bars4(len(tt.bars), 160), Tracks: []score.Track{{Bars: tt.bars}}}
+		if got := slices.Contains(tagsOf(t, sc, rhythmGuitar, difficulty.Rhythm), "endurance"); got != tt.want {
+			t.Errorf("%s: endurance %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 // melody is a bar of single sixteenth notes up and down the B and high E strings
 // around the 12th fret, with fx on every fourth note.
 func melody(fx score.Fx) []score.Beat {
