@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dev.tabsync.tabfinder.data.Query
 import dev.tabsync.tabfinder.data.SearchResult
 import dev.tabsync.tabfinder.data.Song
+import dev.tabsync.tabfinder.data.Sort
 import dev.tabsync.tabfinder.data.TabSource
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -72,9 +73,20 @@ class MainViewModel(private val finder: TabSource) : ViewModel() {
     }
   }
 
+  /** Drops the filters; the order stays. */
   fun clearFilters() {
-    input.value = Query()
+    input.value = Query(sort = input.value.sort)
   }
+
+  /** The range of levels a role's part must be in: 1 to 10 for any. */
+  fun level(role: Role): IntRange = input.value.level(role)
+
+  /** Sets the range of levels of a role's part; 1 to 10 is any, no filter. */
+  fun setLevel(role: Role, range: IntRange) = input.update { it.withLevel(role, range) }
+
+  fun clearLevel(role: Role) = setLevel(role, allLevels)
+
+  fun setSort(sort: Sort) = input.update { it.copy(sort = sort) }
 
   fun setRoot(root: String) {
     _state.update { it.copy(root = root, songs = emptyList()) }

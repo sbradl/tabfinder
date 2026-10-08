@@ -3,6 +3,7 @@ package dev.tabsync.tabfinder.ui
 import dev.tabsync.tabfinder.data.Query
 import dev.tabsync.tabfinder.data.ScanResult
 import dev.tabsync.tabfinder.data.SearchResult
+import dev.tabsync.tabfinder.data.Sort
 import dev.tabsync.tabfinder.data.Song
 import dev.tabsync.tabfinder.data.TabSource
 import kotlinx.coroutines.CompletableDeferred
@@ -334,6 +335,52 @@ class MainViewModelTest {
     advanceUntilIdle()
     assertEquals(Query(), vm.input.value)
     assertEquals(Query(), source.searches.last())
+  }
+
+  @Test
+  fun `levels per part go into the query and come back as ranges`() = runTest(dispatcher) {
+    val source = FakeSource("/tabs").apply { saved = listOf(song("One")) }
+    val vm = vm(source)
+    advanceUntilIdle()
+    assertEquals(1..10, vm.level(Role.RHYTHM))
+    vm.setLevel(Role.RHYTHM, 5..7)
+    vm.setLevel(Role.DRUMS, 1..3)
+    advanceUntilIdle()
+    assertEquals(Query(rhythm = "5-7", drums = "1-3"), source.searches.last())
+    assertEquals(5..7, vm.level(Role.RHYTHM))
+    // The whole range is no filter: songs without the part count too.
+    vm.setLevel(Role.DRUMS, 1..10)
+    assertEquals("", vm.input.value.drums)
+    vm.clearLevel(Role.RHYTHM)
+    assertEquals(Query(), vm.input.value)
+    // Open ends, as tabscan takes them, are the ends of the range.
+    vm.input.value = Query(bass = "-3", lead = "7-")
+    assertEquals(1..3, vm.level(Role.BASS))
+    assertEquals(7..10, vm.level(Role.LEAD))
+  }
+
+  @Test
+  fun `chips sum up the ranges, in the order of the parts`() {
+    assertEquals(emptyList<LevelChip>(), Query().chips())
+    assertEquals(
+      listOf(LevelChip(Role.DRUMS, "7–10"), LevelChip(Role.RHYTHM, "5–7"), LevelChip(Role.LEAD, "8")),
+      Query(lead = "8-8", rhythm = "5-7", drums = "7-").chips(),
+    )
+  }
+
+  @Test
+  fun `the order goes into the query, and clearing the filters keeps it`() = runTest(dispatcher) {
+    val source = FakeSource("/tabs").apply { saved = listOf(song("One")) }
+    val vm = vm(source)
+    advanceUntilIdle()
+    vm.setSort(Sort.HARDEST)
+    advanceUntilIdle()
+    assertEquals(Query(sort = Sort.HARDEST), source.searches.last())
+    vm.setLevel(Role.BASS, 2..4)
+    vm.input.value = vm.input.value.copy(artist = "a")
+    vm.clearFilters()
+    advanceUntilIdle()
+    assertEquals(Query(sort = Sort.HARDEST), vm.input.value)
   }
 
   @Test
