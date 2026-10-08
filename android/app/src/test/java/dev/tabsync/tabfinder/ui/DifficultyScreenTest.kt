@@ -166,4 +166,20 @@ class DifficultyScreenTest {
     val first = compose.onNodeWithTag("song-Copper Wolves/Bellows.gp5").fetchSemanticsNode().boundsInRoot
     assertEquals("the hardest song's row starts at the top of the list", list.top, first.top, 0.5f)
   }
+
+  // E-AND-14: so does a list a filter changed: dropping one brings back the songs before.
+  @Test
+  fun aChangedFilterStartsAtTheTop() {
+    start(more = 30)
+    compose.onNodeWithTag("difficulty").performClick()
+    slide("rhythm", 7, 7)
+    compose.onNodeWithTag("difficulty-done").performClick()
+    until { titles() == listOf("Cinder") }
+    compose.onNodeWithTag("chip-clear-rhythm").performClick()
+    until { titles().firstOrNull() == "Anvil" }
+    compose.waitForIdle()
+    val list = compose.onNodeWithTag("songs").fetchSemanticsNode().boundsInRoot
+    val first = compose.onNodeWithTag("song-Copper Wolves/Anvil.gp5").fetchSemanticsNode().boundsInRoot
+    assertEquals("the first song's row starts at the top of the list", list.top, first.top, 0.5f)
+  }
 }

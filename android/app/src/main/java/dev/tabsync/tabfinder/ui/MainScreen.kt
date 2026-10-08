@@ -60,7 +60,6 @@ import dev.tabsync.tabfinder.R
 import dev.tabsync.tabfinder.data.Query
 import dev.tabsync.tabfinder.data.SearchResult
 import dev.tabsync.tabfinder.data.Song
-import dev.tabsync.tabfinder.data.Sort
 import dev.tabsync.tabfinder.data.Tuning
 import dev.tabsync.tabfinder.theme.LocalStringColors
 import dev.tabsync.tabfinder.theme.Mono
@@ -163,7 +162,7 @@ fun MainScreen(
                 val root = state.root!!
                 scope.launch { onOpen(root, song)?.let(viewModel::showMessage) }
               },
-              order = results!!.query.sort,
+              query = results!!.query,
             )
           }
         }
@@ -373,12 +372,12 @@ private fun <T> SuggestField(
 }
 
 /**
- * The songs, from the top again for each [order]: a list that kept its place would follow the song on
- * top to wherever the new order puts it.
+ * The songs, from the top again for each [query] they answer: a list that kept its place would follow
+ * the song on top to wherever a new order or filter puts it. Songs of a rescan keep the place.
  */
 @Composable
-internal fun SongList(songs: List<Song>, onOpen: (Song) -> Unit, modifier: Modifier = Modifier, order: Sort = Sort.AZ) {
-  val state = remember(order) { LazyListState() }
+internal fun SongList(songs: List<Song>, onOpen: (Song) -> Unit, modifier: Modifier = Modifier, query: Query = Query()) {
+  val state = remember(query) { LazyListState() }
   LazyColumn(modifier.testTag("songs"), state = state) {
     items(songs, key = { it.path }) { song -> SongRow(song, Modifier.testTag("song-${song.path}").clickable { onOpen(song) }) }
   }
