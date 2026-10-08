@@ -8,10 +8,28 @@ import (
 )
 
 // rating is how hard a part is on a scale of 1 to 10, rounded to a tenth: mostly how fast
-// it is, plus what else it asks for.
-func rating(r Role, bars []bar) float64 {
-	hard := speed(bars) + 0.3*stretchiness(r, bars)
+// it is, plus what else it asks for. plays is how often each bar of the song is played.
+func rating(r Role, bars []bar, plays []int) float64 {
+	hard := speed(bars) + 0.3*stretchiness(r, bars) + 0.15*rhythmic(r, bars) + 0.15*learning(bars, plays)
 	return math.Round((1+9*clamp(hard))*10) / 10
+}
+
+// learning is how much there is to learn of a part, from 0 for up to 8 different bars to 1
+// for 40 or more.
+func learning(bars []bar, plays []int) float64 {
+	distinct, _ := material(bars, plays)
+	return scale(float64(distinct), 8, 40)
+}
+
+// rhythmic is how tricky a part's rhythm is, from 0 to 1: odd meters, meter changes,
+// syncopation, polyrhythm and tuplets other than triplets.
+func rhythmic(r Role, bars []bar) float64 {
+	odd := scale(share(bars, func(b bar) bool { return oddMeter(b.head) }), 0, 0.5)
+	changes := scale(float64(meterChanges(bars)), 0, 16)
+	synco := scale(share(bars, func(b bar) bool { return syncopated(b, r == Drums) }), 0, 0.75)
+	poly := scale(float64(count(bars, func(b bar) bool { return b.poly })), 0, 8)
+	tuplets := scale(share(bars, func(b bar) bool { return hasTuplet(b.beats, isOddTuplet) }), 0, 0.25)
+	return clamp(0.4*odd + 0.4*changes + 0.4*synco + 0.5*poly + 0.3*tuplets)
 }
 
 // stretchiness is how much a part stretches the fretting hand, from 0 to 1 for a stretch in
