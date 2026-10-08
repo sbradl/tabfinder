@@ -65,6 +65,7 @@ type ui struct {
 	list                      widget.List
 	rows                      map[string]*gesture.Click // by song path, so a row's hover and press stay with its song
 	folderBtn, rescanBtn, cta widget.Clickable
+	window                    int // tag for every press in the window, see leaveFields
 	levels
 }
 
@@ -175,6 +176,7 @@ func (u *ui) update(gtx C) {
 	for _, f := range u.fields() {
 		u.handleField(gtx, f)
 	}
+	u.leaveFields(gtx)
 	if u.folderBtn.Clicked(gtx) {
 		u.chooseFolder()
 	}
@@ -193,6 +195,9 @@ func (u *ui) update(gtx C) {
 func (u *ui) layout(gtx C) D {
 	u.update(gtx)
 	paint.Fill(gtx.Ops, u.pal.bg)
+	// Under everything, so it sees every press but those on menus, which are drawn last.
+	defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
+	event.Op(gtx.Ops, &u.window)
 	layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(u.topBar),
 		layout.Flexed(1, u.content),
@@ -200,6 +205,27 @@ func (u *ui) layout(gtx C) D {
 	u.levelsPopup(gtx)
 	u.snackbar(gtx)
 	return D{Size: gtx.Constraints.Max}
+}
+
+// leaveFields closes the suggestions of the fields beside a press, and leaves the focused
+// field if the press is on none. Presses on the suggestions don't get here.
+func (u *ui) leaveFields(gtx C) {
+	for {
+		if _, ok := gtx.Event(pointer.Filter{Target: &u.window, Kinds: pointer.Press}); !ok {
+			return
+		}
+		onField := false
+		for _, f := range u.fields() {
+			if f.reopen.Hovered() {
+				onField = true
+			} else {
+				f.dismissed = true
+			}
+		}
+		if !onField {
+			gtx.Execute(key.FocusCmd{})
+		}
+	}
 }
 
 // prompt is a message with a button, shown instead of the song list.

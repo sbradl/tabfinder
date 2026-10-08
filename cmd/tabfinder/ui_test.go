@@ -294,3 +294,37 @@ func TestReopenSuggestions(t *testing.T) {
 		t.Error("the down arrow doesn't reopen the suggestions")
 	}
 }
+
+// E-DSK-16: a click beside a field and its suggestions closes them and leaves the field.
+func TestClickBesideClosesSuggestions(t *testing.T) {
+	h := libHarness(t)
+	focused := func(f *field) bool { return h.r.Source().Focused(&f.editor) }
+	for _, at := range []struct {
+		what string
+		x, y float32
+	}{
+		{"the title", 60, 30},
+		{"the filter panel", 700, 290},
+		{"a row below the menu", 500, 850},
+	} {
+		h.clickField(&h.u.artist)
+		if !h.open(&h.u.artist) {
+			t.Fatal("focusing the field doesn't open its suggestions")
+		}
+		h.click(at.x, at.y)
+		if h.open(&h.u.artist) || focused(&h.u.artist) {
+			t.Errorf("after a click on %s: suggestions open %v, field focused %v", at.what, h.open(&h.u.artist), focused(&h.u.artist))
+		}
+	}
+	// A click on another field moves there.
+	h.clickField(&h.u.artist)
+	h.clickField(&h.u.tuning)
+	if h.open(&h.u.artist) || !h.open(&h.u.tuning) {
+		t.Errorf("artist open %v, tuning open %v", h.open(&h.u.artist), h.open(&h.u.tuning))
+	}
+	// A click on the menu itself picks, and doesn't close it some other way first.
+	h.clickRect(h.menuItemRect(&h.u.tuning, 0))
+	if h.u.in.Tuning == "" {
+		t.Error("the click on a suggestion didn't pick it")
+	}
+}
