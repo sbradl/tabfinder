@@ -183,6 +183,21 @@ func TestScorePickingLimit(t *testing.T) {
 	}
 }
 
+func TestScoreGallops(t *testing.T) {
+	// Four minutes at 150 of power chords: plain sixteenths, or gallops (an eighth, two
+	// sixteenths) with fewer notes but a change of motion in every beat.
+	var gallop []score.Beat
+	for k := range 4 {
+		gallop = append(gallop, at(k*q, k*q+e, k*q+e+s)...)
+	}
+	for i := range gallop {
+		gallop[i].Dur = min(gallop[i].Dur, e) // at() holds the last chord to the bar's end
+	}
+	plain := scoreOf(t, track(150, every(s, powerChord...)).Bars, 150, rhythmGuitar, difficulty.Rhythm)
+	galloping := scoreOf(t, track(150, gallop).Bars, 150, rhythmGuitar, difficulty.Rhythm)
+	harder(t, "plain sixteenths, gallops", plain, galloping)
+}
+
 func TestScoreTellsHardSongsApart(t *testing.T) {
 	// Four minutes of a run of sixteenths at 200, busy for both hands: the same bar over
 	// and over, or ever changing.

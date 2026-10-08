@@ -30,10 +30,60 @@ func soften(hard float64) float64 {
 // Speed is judged against a limit: picking gets hard all at once around it, from
 // comfortable to undoable, and past it more speed adds little. Fitted to a band's own
 // ranking of songs, the limit is 6 strikes a second.
+//
+// Fast uneven picking, like gallops (an eighth and two sixteenths), is harder than an even
+// stream of notes: the motion changes in every beat.
 func pickingHand(bars []bar, plays []int) float64 {
 	pace := 1 / (1 + math.Exp(-pickSteepness*(percentile(bars, 0.75, picksPerSecond)-fastPickRate)))
 	stamina := scale(fastPicking(bars, plays), 0, 300)
-	return 0.5*pace + 0.5*stamina
+	return 0.5*pace + 0.5*stamina + 0.2*pace*uneven(bars)
+}
+
+// uneven is the share of a part's beats (quarter notes) of two strikes or more that aren't
+// evenly spaced: strikes of different lengths, or off the beat.
+func uneven(bars []bar) float64 {
+	beats, odd := 0, 0
+	for _, b := range bars {
+		for _, starts := range strikesByBeat(b) {
+			if len(starts) < 2 {
+				continue
+			}
+			beats++
+			if !evenlySpaced(starts) {
+				odd++
+			}
+		}
+	}
+	if beats == 0 {
+		return 0
+	}
+	return float64(odd) / float64(beats)
+}
+
+// strikesByBeat is when notes are struck in a bar, by quarter note.
+func strikesByBeat(b bar) map[int][]int {
+	out := map[int][]int{}
+	for _, beat := range b.beats { // sorted by start
+		k := beat.Start / score.Quarter
+		if l := out[k]; beat.Struck() && (len(l) == 0 || l[len(l)-1] != beat.Start) {
+			out[k] = append(l, beat.Start)
+		}
+	}
+	return out
+}
+
+// evenlySpaced reports whether strikes within a beat start on it and split it evenly.
+func evenlySpaced(starts []int) bool {
+	if starts[0]%score.Quarter != 0 {
+		return false
+	}
+	step := score.Quarter / len(starts)
+	for i, t := range starts {
+		if t-starts[0] != i*step {
+			return false
+		}
+	}
+	return true
 }
 
 // fastPickRate is the strikes per second from which picking is fast: eighths at 180 BPM,
