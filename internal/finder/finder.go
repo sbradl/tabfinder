@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"tabfinder/internal/difficulty"
 	"tabfinder/internal/tab"
 )
 
@@ -75,13 +76,55 @@ type Query struct {
 	Name, Artist, Tuning, BPM string
 	// Strings is set by picking a tuning suggestion and dropped when the tuning is typed.
 	Strings int
+	// What each part must be like.
+	Drums, Bass, Rhythm, Lead PartQuery
+	Sort                      Sort
 }
 
+// PartQuery is what a part must be like, as typed.
+type PartQuery struct {
+	Level string // a range of levels: "2-4", "7-"
+	Tags  string // separated by commas, all of them
+}
+
+func (pq PartQuery) active() bool {
+	return strings.TrimSpace(pq.Level) != "" || strings.TrimSpace(pq.Tags) != ""
+}
+
+// Sort is the order of the songs found.
+type Sort string
+
+const (
+	SortAZ      Sort = ""        // by artist, then title
+	SortEasiest Sort = "easiest" // by the hardest part searched for (any if none), easiest first
+	SortHardest Sort = "hardest"
+)
+
+// Part is the query of a role's part.
+func (q Query) Part(r difficulty.Role) PartQuery {
+	switch r {
+	case difficulty.Drums:
+		return q.Drums
+	case difficulty.Bass:
+		return q.Bass
+	case difficulty.Rhythm:
+		return q.Rhythm
+	}
+	return q.Lead
+}
+
+var roles = []difficulty.Role{difficulty.Drums, difficulty.Bass, difficulty.Rhythm, difficulty.Lead}
+
 func (q Query) Active() bool {
-	return q.Name != "" || q.Artist != "" || q.Tuning != "" || q.Strings != 0 || q.BPM != ""
+	parts := false
+	for _, r := range roles {
+		parts = parts || q.Part(r).active()
+	}
+	return q.Name != "" || q.Artist != "" || q.Tuning != "" || q.Strings != 0 || q.BPM != "" || parts
 }
 
 // Filter turns the fields into criteria; an unparsable BPM is left out and reported.
+// So is an unparsable level, see LevelInvalid.
 func (q Query) Filter() (f Filter, bpmInvalid bool) {
 	f = Filter{
 		Name:    strings.TrimSpace(q.Name),
@@ -96,24 +139,101 @@ func (q Query) Filter() (f Filter, bpmInvalid bool) {
 		}
 		bpmInvalid = err != nil
 	}
+	for _, r := range roles {
+		if pf, ok := q.Part(r).filter(); ok {
+			if f.Parts == nil {
+				f.Parts = map[difficulty.Role]PartFilter{}
+			}
+			f.Parts[r] = pf
+		}
+	}
 	return f, bpmInvalid
+}
+
+// filter is the criteria of a part's query; ok is false for none.
+func (pq PartQuery) filter() (pf PartFilter, ok bool) {
+	if lv := strings.TrimSpace(pq.Level); lv != "" {
+		if r, err := ParseLevelRange(lv); err == nil {
+			pf.Level = &r
+		}
+	}
+	for _, tag := range strings.Split(pq.Tags, ",") {
+		if tag = strings.TrimSpace(tag); tag != "" {
+			pf.Tags = append(pf.Tags, tag)
+		}
+	}
+	return pf, pf.Level != nil || len(pf.Tags) > 0
+}
+
+// LevelInvalid is the roles whose level range can't be parsed; nil if none.
+func (q Query) LevelInvalid() map[difficulty.Role]bool {
+	var out map[difficulty.Role]bool
+	for _, r := range roles {
+		if lv := strings.TrimSpace(q.Part(r).Level); lv != "" {
+			if _, err := ParseLevelRange(lv); err != nil {
+				if out == nil {
+					out = map[difficulty.Role]bool{}
+				}
+				out[r] = true
+			}
+		}
+	}
+	return out
 }
 
 // Result of a search.
 type Result struct {
-	Matches    []int // indices into Entries
-	BPMInvalid bool
-	Tunings    []Tuning // for suggestions, see Search
+	Matches      []int // indices into Entries
+	BPMInvalid   bool
+	LevelInvalid map[difficulty.Role]bool // the roles whose level range can't be parsed
+	Tunings      []Tuning                 // for suggestions, see Search
 }
 
-// Search returns the matching songs, and the tunings of the songs the other
-// fields leave (so picking an artist trims them to that artist's), grouped
+// Search returns the matching songs in the order asked for, and the tunings of the songs
+// the other fields leave (so picking an artist trims them to that artist's), grouped
 // by string count: guitars 6, 7, 8..., then bass 4, 5, most common first.
 func (l *Library) Search(q Query) Result {
 	f, invalid := q.Filter()
 	other := f
 	other.Tuning, other.Strings = "", 0
-	return Result{Matches: l.matching(f), BPMInvalid: invalid, Tunings: l.tuningsOf(l.matching(other))}
+	matches := l.matching(f)
+	l.sortBy(matches, q)
+	return Result{Matches: matches, BPMInvalid: invalid, LevelInvalid: q.LevelInvalid(), Tunings: l.tuningsOf(l.matching(other))}
+}
+
+// sortBy sorts songs by how hard they are, if the query asks for it: by the hardest of
+// the parts searched for, of any part if none is; songs not rated last.
+func (l *Library) sortBy(idx []int, q Query) {
+	if q.Sort == SortAZ {
+		return
+	}
+	var searched []difficulty.Role
+	for _, r := range roles {
+		if q.Part(r).active() {
+			searched = append(searched, r)
+		}
+	}
+	hardest := func(s *tab.Song) float64 {
+		h := 0.0
+		for _, p := range s.Parts {
+			if len(searched) == 0 || slices.Contains(searched, p.Role) {
+				h = max(h, p.Score)
+			}
+		}
+		return h
+	}
+	slices.SortStableFunc(idx, func(a, b int) int {
+		sa, sb := l.Entries[a].Song, l.Entries[b].Song
+		switch {
+		case sa.Parts == nil && sb.Parts != nil:
+			return 1 // not rated: last
+		case sa.Parts != nil && sb.Parts == nil:
+			return -1
+		case q.Sort == SortHardest:
+			return cmp.Compare(hardest(sb), hardest(sa))
+		}
+		return cmp.Compare(hardest(sa), hardest(sb))
+	})
 }
 
 func (l *Library) matching(f Filter) []int {
