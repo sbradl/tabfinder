@@ -1,5 +1,6 @@
 package dev.tabsync.tabfinder.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -255,7 +257,15 @@ fun SortButton(sort: Sort, onSort: (Sort) -> Unit) {
       Icon(painterResource(R.drawable.ic_sort), "Sort", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
       Text(sortLabel(sort), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp))
     }
-    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+    // Raised off the top bar like the suggestion menus: menus default to its own color.
+    DropdownMenu(
+      expanded = open,
+      onDismissRequest = { open = false },
+      containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+      border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+      shadowElevation = 12.dp,
+      shape = RoundedCornerShape(10.dp),
+    ) {
       for (s in Sort.entries) {
         DropdownMenuItem(
           text = { Text(sortName(s)) },

@@ -45,18 +45,25 @@ class DifficultyScreenTest {
 
   private fun part(role: String, score: Double) = """{"role":"$role","tracks":[0],"score":$score}"""
 
-  private fun start() {
+  /** [more] songs after the four, so the list scrolls: "Filler 01"... with a rhythm part of level 3. */
+  private fun start(more: Int = 0) {
     val data = folder.newFolder("data")
     File(data, "index.jsonl").writeText(
-      listOf(
+      (listOf(
           """{"tabfinderIndex":3}""",
           song("Anvil", part("drums", 2.2), part("rhythm", 4.6)),
           song("Bellows", part("drums", 7.8), part("bass", 5.0), part("rhythm", 6.4), part("lead", 9.1)),
           song("Cinder", part("rhythm", 7.0)),
           """{"path":"Copper Wolves/Dross.tg","format":"tg","artist":"Copper Wolves","title":"Dross"}""",
-        )
+        ) + (1..more).map { song("Filler %02d".format(it), part("rhythm", 3.0)) })
         .joinToString("\n", postfix = "\n")
     )
+    if (more > 0) {
+      val vm = MainViewModel(Finder(hostTabscan(), data, MemoryRootStore(folder.newFolder("Tabs").path)))
+      compose.setContent { TabFinderTheme { MainScreen(vm, onPickFolder = {}, onOpen = { _, _ -> null }) } }
+      until { titles().firstOrNull() == "Anvil" }
+      return
+    }
     val vm = MainViewModel(Finder(hostTabscan(), data, MemoryRootStore(folder.newFolder("Tabs").path)))
     compose.setContent { TabFinderTheme { MainScreen(vm, onPickFolder = {}, onOpen = { _, _ -> null }) } }
     waitForTitles(listOf("Anvil", "Bellows", "Cinder", "Dross"))
@@ -145,5 +152,18 @@ class DifficultyScreenTest {
     sortBy("az")
     waitForTitles(listOf("Anvil", "Bellows", "Cinder", "Dross"))
     compose.onNodeWithTag("sort-button").assert(hasText("A–Z"))
+  }
+
+  // E-AND-15: a new order starts at the top, even where the list scrolls.
+  @Test
+  fun aNewOrderStartsAtTheTop() {
+    start(more = 30)
+    compose.onNodeWithContentDescription("Sort").performClick()
+    compose.onNodeWithTag("sort-hardest").performClick()
+    until { titles().firstOrNull() == "Bellows" }
+    compose.waitForIdle()
+    val list = compose.onNodeWithTag("songs").fetchSemanticsNode().boundsInRoot
+    val first = compose.onNodeWithTag("song-Copper Wolves/Bellows.gp5").fetchSemanticsNode().boundsInRoot
+    assertEquals("the hardest song's row starts at the top of the list", list.top, first.top, 0.5f)
   }
 }

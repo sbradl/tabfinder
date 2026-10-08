@@ -29,8 +29,8 @@ data class MainUiState(
   val message: String? = null,
 )
 
-/** The songs a search matched, with the suggestions for what's typed. */
-data class Results(val songs: List<Song>, val search: SearchResult)
+/** The songs a search for [query] matched, with the suggestions for what's typed. */
+data class Results(val songs: List<Song>, val search: SearchResult, val query: Query = Query())
 
 class MainViewModel(private val finder: TabSource) : ViewModel() {
   private val _state = MutableStateFlow(MainUiState(root = finder.root))
@@ -58,7 +58,7 @@ class MainViewModel(private val finder: TabSource) : ViewModel() {
           showMessage("Search failed: ${it.message}")
           SearchResult()
         }
-        Results(r.matches.mapNotNull { songs[it] }, r)
+        Results(r.matches.mapNotNull { songs[it] }, r, q)
       }
       .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 

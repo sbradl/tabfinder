@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -59,6 +60,7 @@ import dev.tabsync.tabfinder.R
 import dev.tabsync.tabfinder.data.Query
 import dev.tabsync.tabfinder.data.SearchResult
 import dev.tabsync.tabfinder.data.Song
+import dev.tabsync.tabfinder.data.Sort
 import dev.tabsync.tabfinder.data.Tuning
 import dev.tabsync.tabfinder.theme.LocalStringColors
 import dev.tabsync.tabfinder.theme.Mono
@@ -161,6 +163,7 @@ fun MainScreen(
                 val root = state.root!!
                 scope.launch { onOpen(root, song)?.let(viewModel::showMessage) }
               },
+              order = results!!.query.sort,
             )
           }
         }
@@ -369,9 +372,14 @@ private fun <T> SuggestField(
   }
 }
 
+/**
+ * The songs, from the top again for each [order]: a list that kept its place would follow the song on
+ * top to wherever the new order puts it.
+ */
 @Composable
-internal fun SongList(songs: List<Song>, onOpen: (Song) -> Unit, modifier: Modifier = Modifier) {
-  LazyColumn(modifier) {
+internal fun SongList(songs: List<Song>, onOpen: (Song) -> Unit, modifier: Modifier = Modifier, order: Sort = Sort.AZ) {
+  val state = remember(order) { LazyListState() }
+  LazyColumn(modifier.testTag("songs"), state = state) {
     items(songs, key = { it.path }) { song -> SongRow(song, Modifier.testTag("song-${song.path}").clickable { onOpen(song) }) }
   }
 }
