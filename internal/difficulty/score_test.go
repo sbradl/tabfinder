@@ -86,6 +86,53 @@ func TestScoreStretches(t *testing.T) {
 	harder(t, "a riff in one position, the same with a stretch", scoreBar(easy), scoreBar(wide))
 }
 
+func TestScoreRhythm(t *testing.T) {
+	partScore := func(sc *score.Score) float64 {
+		for _, p := range difficulty.Analyze(sc, rhythmGuitar) {
+			return p.Score
+		}
+		return 0
+	}
+	repeat := func(n int, sigs ...string) []string {
+		var out []string
+		for range n {
+			out = append(out, sigs...)
+		}
+		return out
+	}
+	// Eighth power chords, as fast in every meter.
+	harder(t, "4/4, 7/8, 7/8 and 4/4 in turn",
+		partScore(meters(repeat(16, "4/4")...)), partScore(meters(repeat(16, "7/8")...)), partScore(meters(repeat(8, "7/8", "4/4")...)))
+
+	// Four chords a bar: on the beat, then pushed off it.
+	straight, pushed := at(0, q, 2*q, 3*q), at(0, 3*e, 5*e, 7*e)
+	scoreBar := func(bar []score.Beat) float64 {
+		return scoreOf(t, track(16, bar).Bars, 120, rhythmGuitar, difficulty.Rhythm)
+	}
+	harder(t, "on the beat, syncopated", scoreBar(straight), scoreBar(pushed))
+}
+
+func TestScoreMaterial(t *testing.T) {
+	// Four open strings a bar, in the same rhythm: as fast, no fretting. The strings of
+	// different bars differ in two notes at least (the 4th is a check digit of the others),
+	// so no two are the same but for a note.
+	openStrings := func(strs ...int) []score.Beat {
+		bar := at(0, q, 2*q, 3*q)
+		for j := range bar {
+			bar[j].Notes = []score.Note{{String: strs[j]}}
+		}
+		return bar
+	}
+	var many [][]score.Beat
+	for i := range 40 {
+		d0, d1, d2 := i%6, i/6%6, i/36%6
+		many = append(many, openStrings(d0, d1, d2, (d0+d1+d2)%6))
+	}
+	one := scoreOf(t, track(40, many[7]).Bars, 120, rhythmGuitar, difficulty.Rhythm)
+	different := scoreOf(t, many, 120, rhythmGuitar, difficulty.Rhythm)
+	harder(t, "one bar 40 times, 40 different bars", one, different)
+}
+
 func TestScoreRisesWithSpeed(t *testing.T) {
 	riff := track(16, every(s, powerChord...)).Bars
 	var scores []float64

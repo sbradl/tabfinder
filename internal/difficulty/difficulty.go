@@ -47,7 +47,8 @@ func Analyze(sc *score.Score, tracks []TrackInfo) []Part {
 }
 
 func newPart(r Role, bars []bar, sc *score.Score) Part {
-	p := Part{Role: r, Score: rating(r, bars), Tags: tags(r, bars, timesPlayed(sc.Bars))}
+	plays := timesPlayed(sc.Bars)
+	p := Part{Role: r, Score: rating(r, bars, plays), Tags: tags(r, bars, plays)}
 	for _, b := range bars {
 		if len(p.Tracks) == 0 || p.Tracks[len(p.Tracks)-1] != b.track {
 			p.Tracks = append(p.Tracks, b.track)
