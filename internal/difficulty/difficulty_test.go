@@ -31,19 +31,17 @@ func TestRoles(t *testing.T) {
 		{Name: "Lead Vocals", Instrument: "FX 3 (crystal)"},                         // no strings: sung
 		{Name: "Solo Violin", Instrument: "Violin", Pitches: []int{55, 62, 69, 76}}, // not a guitar's strings
 	}
-	got := difficulty.Analyze(sc, tracks)
-	want := []difficulty.Part{
-		{Role: difficulty.Drums, Tracks: []int{0}},
-		{Role: difficulty.Bass, Tracks: []int{1}},
-		{Role: difficulty.Rhythm, Tracks: []int{2}},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("parts:\n got %+v\nwant %+v", got, want)
+	if got, want := tracksByRole(sc, tracks), map[difficulty.Role][]int{
+		difficulty.Drums:  {0},
+		difficulty.Bass:   {1},
+		difficulty.Rhythm: {2},
+	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("tracks by role: %v, want %v", got, want)
 	}
 }
 
-// guitarRoles is the roles each track plays in.
-func guitarRoles(sc *score.Score, tracks []difficulty.TrackInfo) map[difficulty.Role][]int {
+// tracksByRole is the tracks each role plays on.
+func tracksByRole(sc *score.Score, tracks []difficulty.TrackInfo) map[difficulty.Role][]int {
 	out := map[difficulty.Role][]int{}
 	for _, p := range difficulty.Analyze(sc, tracks) {
 		out[p.Role] = p.Tracks
@@ -76,7 +74,7 @@ func TestRhythmAndLeadByContent(t *testing.T) {
 	}
 	for _, tt := range tests {
 		sc := &score.Score{Bars: bars4(8, 120), Tracks: tt.tracks}
-		if got := guitarRoles(sc, tt.info); !reflect.DeepEqual(got, tt.want) {
+		if got := tracksByRole(sc, tt.info); !reflect.DeepEqual(got, tt.want) {
 			t.Errorf("%s: %v, want %v", tt.name, got, tt.want)
 		}
 	}

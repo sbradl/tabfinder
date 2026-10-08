@@ -28,6 +28,7 @@ type TrackInfo struct {
 type Part struct {
 	Role   Role     `json:"role"`
 	Tracks []int    `json:"tracks"` // the tracks it is played on, by index
+	Score  float64  `json:"score"`  // how hard it is to play, 1 to 10
 	Tags   []string `json:"tags,omitempty"`
 }
 
@@ -46,7 +47,7 @@ func Analyze(sc *score.Score, tracks []TrackInfo) []Part {
 }
 
 func newPart(r Role, bars []bar, sc *score.Score) Part {
-	p := Part{Role: r, Tags: tags(r, bars, timesPlayed(sc.Bars))}
+	p := Part{Role: r, Score: rating(r, bars), Tags: tags(r, bars, timesPlayed(sc.Bars))}
 	for _, b := range bars {
 		if len(p.Tracks) == 0 || p.Tracks[len(p.Tracks)-1] != b.track {
 			p.Tracks = append(p.Tracks, b.track)
