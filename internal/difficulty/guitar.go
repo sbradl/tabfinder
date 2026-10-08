@@ -38,8 +38,9 @@ func reach(lo, hi int) float64 { return math.Exp2(-float64(lo)/12) - math.Exp2(-
 
 // grip is fretted notes the hand holds or plays without moving.
 type grip struct {
-	lo, hi  int          // frets
-	strings map[int]bool // the strings
+	lo, hi   int          // frets
+	strings  map[int]bool // the strings
+	nStrings int          // of the guitar
 }
 
 func (g *grip) add(n score.Note) {
@@ -50,7 +51,26 @@ func (g *grip) add(n score.Note) {
 	g.strings[n.String] = true
 }
 
-func (g *grip) stretched() bool { return g.strings != nil && reach(g.lo, g.hi) >= stretchReach }
+// strain is how far the hand reaches for a grip, as a share of the scale length: the reach
+// along the neck, made longer by strings skipped (the fingers spread across too) and by
+// the low strings (the hand has to wrap further around the neck), up to a tenth on the lowest.
+func (g *grip) strain() float64 {
+	if g.strings == nil {
+		return 0
+	}
+	low, high := 1000, -1
+	for s := range g.strings {
+		low, high = min(low, s), max(high, s)
+	}
+	skipped := high - low + 1 - len(g.strings)
+	lowness := 0.0
+	if g.nStrings > 1 {
+		lowness = 1 - float64(low)/float64(g.nStrings-1)
+	}
+	return reach(g.lo, g.hi) * (1 + 0.15*float64(skipped)) * (1 + 0.1*lowness)
+}
+
+func (g *grip) stretched() bool { return g.strain() >= stretchReach }
 
 // fretted reports whether a note needs a finger: struck, not open.
 func fretted(n score.Note) bool { return !n.Tie && !n.Dead && n.Fret > 0 }
@@ -60,8 +80,9 @@ func fretted(n score.Note) bool { return !n.Tie && !n.Dead && n.Fret > 0 }
 func grips(b bar) []*grip {
 	var out []*grip
 	quarters := map[int]*grip{}
+	nStrings := len(b.info.Pitches)
 	for _, beat := range b.beats {
-		chord := &grip{}
+		chord := &grip{nStrings: nStrings}
 		for _, n := range beat.Notes {
 			if !fretted(n) {
 				continue
@@ -69,7 +90,7 @@ func grips(b bar) []*grip {
 			chord.add(n)
 			k := beat.Start / score.Quarter
 			if quarters[k] == nil {
-				quarters[k] = &grip{}
+				quarters[k] = &grip{nStrings: nStrings}
 			}
 			quarters[k].add(n)
 		}
