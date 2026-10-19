@@ -721,11 +721,12 @@ func (u *ui) menu(gtx C, f *field, width int, m *menu) {
 			gtx.Constraints = layout.Exact(sz)
 			return layout.Inset{Left: 16, Right: 16}.Layout(gtx, func(gtx C) D {
 				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-					layout.Flexed(1, func(gtx C) D { return u.text(gtx, labelLarge, u.pal.fg, it.text) }),
+					layout.Flexed(1, func(gtx C) D { gtx.Constraints.Min.Y = 0; return u.text(gtx, labelLarge, u.pal.fg, it.text) }),
 					layout.Rigid(func(gtx C) D {
 						if it.detail == "" {
 							return D{}
 						}
+						gtx.Constraints.Min.Y = 0
 						return u.text(gtx, labelSmall, u.pal.fgMuted, it.detail)
 					}),
 				)

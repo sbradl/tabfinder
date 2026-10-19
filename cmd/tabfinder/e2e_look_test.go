@@ -246,6 +246,32 @@ func TestPixelsMenuHoverAndDisabled(t *testing.T) {
 	}
 }
 
+// The suggestions' text sits in the middle of its row, not at the top.
+func TestPixelsMenuTextCentered(t *testing.T) {
+	h := libHarness(t)
+	for _, f := range []*field{&h.u.artist, &h.u.tuning} {
+		h.clickField(f)
+		item := h.menuItemRect(f, 0)
+		img := h.render()
+		top, bottom := -1, -1
+		for y := item.Min.Y; y < item.Max.Y; y++ {
+			if hasInk(img, image.Rect(item.Min.X+8, y, item.Max.X-8, y+1), h.u.pal.raised) {
+				if top < 0 {
+					top = y
+				}
+				bottom = y
+			}
+		}
+		if top < 0 {
+			t.Fatalf("%s: no text in the first suggestion", f.label)
+		}
+		if above, below := top-item.Min.Y, item.Max.Y-1-bottom; abs(above-below) > 3 {
+			t.Errorf("%s: text %d dp below the row's top, %d dp above its bottom", f.label, above, below)
+		}
+		h.press(key.NameEscape)
+	}
+}
+
 // E-DSK-29
 func TestWindowSizes(t *testing.T) {
 	for _, w := range []int{360, 600, 1000, 2000} {
