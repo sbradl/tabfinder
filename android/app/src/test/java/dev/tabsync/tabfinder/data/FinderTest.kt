@@ -115,7 +115,7 @@ class FinderTest {
       """{"role":"$role","tracks":[0],"score":$score,"tags":[${tags.joinToString(",") { "\"$it\"" }}]}"""
     b.index.writeText(
       listOf(
-          """{"tabfinderIndex":3}""",
+          """{"tabfinderIndex":4}""",
           song("Anvil", part("drums", 2.2), part("rhythm", 4.6, "syncopated")),
           song("Bellows", part("drums", 7.8, "double kick"), part("rhythm", 6.4, "fast"), part("lead", 9.1, "bends")),
           song("Cinder", part("rhythm", 7.0)),

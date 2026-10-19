@@ -50,7 +50,7 @@ class DifficultyScreenTest {
     val data = folder.newFolder("data")
     File(data, "index.jsonl").writeText(
       (listOf(
-          """{"tabfinderIndex":3}""",
+          """{"tabfinderIndex":4}""",
           song("Anvil", part("drums", 2.2), part("rhythm", 4.6)),
           song("Bellows", part("drums", 7.8), part("bass", 5.0), part("rhythm", 6.4), part("lead", 9.1)),
           song("Cinder", part("rhythm", 7.0)),

@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A title in the file that names another song, such as the album, the band or
+  "untitled", gives way to the title from the file name. The apps scan again once to
+  pick this up.
+
 ## [1.1.0] - 2026-10-08
 
 ### Added

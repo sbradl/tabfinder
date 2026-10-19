@@ -117,6 +117,27 @@ func TestApplyFallbacksPartialMetadata(t *testing.T) {
 	}
 }
 
+func TestApplyFallbacksWrongTitle(t *testing.T) {
+	// A title naming another song gives way to the file name; one that agrees, or a file
+	// name that names nothing, keeps it.
+	for _, tt := range []struct{ title, path, want string }{
+		{"From Mars To Sirius", "Gojira/From Mars To Sirius/Backbone.gpx", "Backbone"},
+		{"untitled", "Die Ärzte/13/Außerirdische.gp3", "Außerirdische"},
+		{"gelcapo@hotmail.com  Hanger 18", "Megadeth/Rust in Peace/Hangar 18.gp3", "Hangar 18"},
+		{"Gojira - Backbone", "Gojira/From Mars To Sirius/Backbone.gpx", "Gojira - Backbone"},
+		{"Rebel Yell", "Children of Bodom/Covers/Rebell Yell.gp3", "Rebel Yell"},
+		{"Hårgalåten", "In Flames/Lunar Strain/Hargalaten.gp3", "Hårgalåten"},
+		{"1/2 Lovesong", "Die Ärzte/13/Einhalb Lovesong.gp4", "1/2 Lovesong"},
+		{"Real Title", "Artist/Album/x.gp5", "Real Title"},
+	} {
+		s := &Song{Artist: strings.Split(tt.path, "/")[0], Title: tt.title}
+		applyFallbacks(s, tt.path)
+		if s.Title != tt.want {
+			t.Errorf("%q in %s: title = %q, want %q", tt.title, tt.path, s.Title, tt.want)
+		}
+	}
+}
+
 func TestScanPath(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "a", "b", "c.gp3"), tabfiles.GP(tabfiles.GPSpec{Version: "3.00", Title: "C", Tracks: []tabfiles.GPTrack{{Name: "G", Strings: tabfiles.StdGuitar}}}))

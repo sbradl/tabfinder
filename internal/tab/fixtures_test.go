@@ -135,7 +135,7 @@ func fixtures() []fixture {
 				Tracks: []tabfiles.GPTrack{guitar("Guitar", 27, tabfiles.StdGuitar...)},
 				Bars:   bars(4, map[int]int{2: 110}),
 			}),
-			want{Format: "gp5", Title: "Rename Me", Artist: "Seventh Floor", Album: "Static Garden", TitleSource: "file", ArtistSource: "path", AlbumSource: "path",
+			want{Format: "gp5", Title: "Misnamed", Artist: "Seventh Floor", Album: "Static Garden", TitleSource: "path", ArtistSource: "path", AlbumSource: "path", // the file name wins over a title naming another song
 				Tracks: []Track{{Name: "Guitar", Instrument: "Electric Guitar (clean)", Pitches: stdLowFirst}},
 				Tempos: []Tempo{{1, 100}, {3, 110}}}},
 
@@ -209,7 +209,7 @@ func fixtures() []fixture {
 
 		// The first half of F3: header and tracks read, the bars cut.
 		{"F12", "Seventh Floor/Static Garden/Cut Short.gp5", f3[:len(f3)/2],
-			want{Format: "gp5", Title: "Paper Weather", Artist: "Seventh Floor", Album: "Static Garden", TitleSource: "file", ArtistSource: "file", AlbumSource: "file",
+			want{Format: "gp5", Title: "Cut Short", Artist: "Seventh Floor", Album: "Static Garden", TitleSource: "path", ArtistSource: "file", AlbumSource: "file",
 				Tracks: f3Tracks, ErrorContains: "tempo changes incomplete", TempoPrefixOf: "F3"}},
 
 		{"F13", "Old Machines/Pre-History.gtp",

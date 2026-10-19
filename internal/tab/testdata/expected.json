@@ -343,10 +343,10 @@
   },
   "Seventh Floor/Static Garden/Cut Short.gp5": {
     "format": "gp5",
-    "title": "Paper Weather",
+    "title": "Cut Short",
     "artist": "Seventh Floor",
     "album": "Static Garden",
-    "titleSource": "file",
+    "titleSource": "path",
     "artistSource": "file",
     "albumSource": "file",
     "tracks": [
@@ -396,10 +396,10 @@
   },
   "Seventh Floor/Static Garden/Misnamed.gp3": {
     "format": "gp5",
-    "title": "Rename Me",
+    "title": "Misnamed",
     "artist": "Seventh Floor",
     "album": "Static Garden",
-    "titleSource": "file",
+    "titleSource": "path",
     "artistSource": "path",
     "albumSource": "path",
     "tracks": [

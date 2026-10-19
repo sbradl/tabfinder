@@ -10,6 +10,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 
 	"tabfinder/internal/difficulty"
 	"tabfinder/internal/score"
@@ -214,7 +218,8 @@ func scan(path, root string) *Song {
 }
 
 // applyFallbacks fills artist/album from <Artist>/<Album>/ path components
-// and the title from the file name when the file has none.
+// and the title from the file name when the file has none, or one that names another
+// song (often the album, in the title field).
 func applyFallbacks(s *Song, rel string) {
 	var dirs []string
 	if d := filepath.Dir(rel); d != "." {
@@ -233,8 +238,46 @@ func applyFallbacks(s *Song, rel string) {
 			s.Album = dirs[1]
 		}
 	}
-	if s.Title == "" {
+	if fromName := titleFromFilename(filepath.Base(rel), s.Artist, artistDir(rel)); s.Title == "" || contradicts(s.Title, s.Artist, fromName) {
 		s.TitleSource = FromPath
-		s.Title = titleFromFilename(filepath.Base(rel), s.Artist, artistDir(rel))
+		s.Title = fromName
 	}
+}
+
+// contradicts reports whether a title from a file names another song than its file name:
+// neither holds the other and they share no word of 4 letters or more, ignoring case,
+// accents, punctuation and tags. A typo on either side ("Rebel Yell" in "Rebell Yell.gp3")
+// still agrees, and a file name without such a word ("x.gp5", "01.gp5") never wins.
+func contradicts(title, artist, fromName string) bool {
+	if a, rest, ok := strings.Cut(title, " - "); ok && slices.Equal(looseWords(a), looseWords(artist)) {
+		title = rest
+	}
+	tw, fw := looseWords(StripTags(title)), looseWords(fromName)
+	t, f := strings.Join(tw, ""), strings.Join(fw, "")
+	if t == "" || strings.Contains(t, f) || strings.Contains(f, t) {
+		return false
+	}
+	named := false
+	for _, w := range fw {
+		if utf8.RuneCountInString(w) >= 4 {
+			if slices.Contains(tw, w) {
+				return false
+			}
+			named = true
+		}
+	}
+	return named
+}
+
+// looseWords is the words of s in lower case, without accents or punctuation.
+func looseWords(s string) []string {
+	return strings.Fields(strings.Map(func(r rune) rune {
+		switch {
+		case unicode.Is(unicode.Mn, r):
+			return -1 // an accent, split off by NFD
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			return unicode.ToLower(r)
+		}
+		return ' '
+	}, norm.NFD.String(s)))
 }
